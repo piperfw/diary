@@ -8,7 +8,7 @@ OPTIONS
 	-a, --add-event
 		Enter an interactive mode to add a new event to the diary.
 
-	-d, --days \x1B[3mnum\x1B[23m
+	\x1B[3mnum\x1B[23m
 		Print events from diary in the next \x1B[3mnum\x1B[23m day(s).
 	 	\x1B[3mnum\x1B[23m must be a non-negative integer (0 for events remaining today).
 
@@ -17,7 +17,7 @@ OPTIONS
 
 SETUP
 - Ensure diary.py, events.json and this .txt are in the same directory.
-- Change the SCRIPT_DIR at the top of Diary class in diary.py to this directory
+- Change the SCRIPT_DIR class variable at the top of Diary class in diary.py to this directory
 - Create a bash alias by adding the following line to your ~/.bashrc
 alias diary="python SCRIPT_DIR/diary.py"
 (Otherwise 'python SCRIPT_DIR/diary.py' must be used to run the program).
