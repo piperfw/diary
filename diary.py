@@ -210,7 +210,7 @@ class Diary:
 				date_list[0], date_list[1], date_list[2], hour=time_list[0], minute=time_list[1])
 			str_to_print = 'Please check your event\'s details:\n'
 			long_date = datetime.datetime.strftime(self.new_event_dict['event_datetime'], "%a, %b %d")
-			time = datetime.datetime.strftime(self.new_event_dict['event_datetime'], "%H:%M")
+			time = datetime.datetime.strftime(self.new_event_dict['event_datetime'], " %H:%M")
 			str_to_print += '\nEvent for ' + long_date + time
 			str_to_print += '\nEvent Title: ' + self.new_title.capitalize() 
 			str_to_print += '\nLocation: ' + self.new_event_dict['location'].capitalize() 
