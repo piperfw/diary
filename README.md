@@ -2,7 +2,7 @@
 Small diary/calendar script for the Bash shell. Written in python3.
 
 #### Description
-- Calender events are stored as a JSON object in `events.json`
+- Calender events are stored as a JSON object in `events.json` (comma separated key-value pairs)
 - Each event has a title, date, time and a location (optional)
 - Run `diary -a` from the command line to add a new event to the events file
 - `diary X` prints events in the diary occurring in the next `X` days (default 7)
