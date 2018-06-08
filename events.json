@@ -1,14 +1,8 @@
 {
-"Dentist":
+"Placeholder_title":
 	{
-		"date" : "2018-09-12",
-		"time" : "15:00",
-		"location" : "Nearby"
-	},
-"Shopping":
-	{
-		"date" : "2018-07-1",
-		"time" : "12:00",
-		"location" : "London"
+		"date" : "2018-06-08",
+		"time" : "13:00",
+		"location" : "First commit"
 	}
 }
