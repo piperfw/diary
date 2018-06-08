@@ -1,0 +1,14 @@
+{
+"Dentist":
+	{
+		"date" : "2018-09-12",
+		"time" : "15:00",
+		"location" : "Nearby"
+	},
+"Shopping":
+	{
+		"date" : "2018-07-1",
+		"time" : "12:00",
+		"location" : "London"
+	}
+}
