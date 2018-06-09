@@ -1,4 +1,4 @@
-# diary
+# diary (in development)
 Small diary/calendar script for the Bash shell. Written in python3.
 
 #### Description
@@ -20,3 +20,9 @@ alias diary="python full_path_to_diary.py"
 Note that `events.json` contains a blank event. You may remove this and other events manually, _provided_ there is at least one event left in the file at any time.
 (There is currently no way to delete events using the script; but a call to `diary` will not display events in the past).
 Greater stability and more features may be implemented in the future.
+
+
+#### Planned Features
+- Ability to have multiple events with the same name
+- `-d` option to delete events (for example, all events in the past)
+- `-s` option to save events in a file in a human readable format
