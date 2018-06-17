@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class Diary:
 	# Path to directory containing script, .json and the .txt
 	# ~~~~~~ TO EDIT ~~~~~~~~ #
-	SCRIPT_DIR = '/home/pip/python_projects/diary/'
+	SCRIPT_DIR = 'full_directory_path'
 	# ~~~~~~ TO EDIT ~~~~~~~~ #
 	# .json file containing a JSON array. Each element of this array is a dictionary representing an event.
 	# Each event dictionary has key-value pairs describing event title,  date, time and location.
