@@ -21,4 +21,5 @@ SETUP
 - Create a bash alias by adding the following line to your ~/.bashrc
 alias diary="python SCRIPT_DIR/diary.py"
 (Otherwise 'python SCRIPT_DIR/diary.py' must be used to run the program).
-Here SCRIPT_DIR must be entered \x1B[3mexplicitly\x1B[23m.
+Here SCRIPT_DIR must be entered \x1B[3mexplicitly\x1B[23m and python should be
+replaced with python3 if appropiate.
