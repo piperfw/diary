@@ -15,12 +15,10 @@ Small diary/calendar script for the Bash shell. Written in python3.
 ```sh
 alias diary="python full_path_to_diary.py"
 ```
-(for example, `alias diary="python /home/username/diary-folder/diary.py"`)
+For example, `alias diary="python /home/username/diary-folder/diary.py"` 
+(here `python` is your python 3 executable - `python3` on some systems). 
 
-Note that `events.json` contains a blank event. You may remove this and other events manually, _provided_ there is at least one event left in the file at any time.
-(There is currently no way to delete events using the script; but a call to `diary` will not display events in the past).
-Greater stability and more features may be implemented in the future.
-
+Note: There is currently no way to delete events using the script, but a call to `diary` will never display events in the past.
 
 #### Planned Features
 - `-d` option to delete events (for example, all events in the past)
