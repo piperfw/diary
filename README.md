@@ -23,7 +23,7 @@ Note: There is currently no way to delete events using the script, but a call to
 #### Planned Features
 - `-d` option to delete events (for example, all events in the past)
 - `-s` option to save events in a file in a human readable format
-- `-v` option to display option
+- `-v` option to display version
 
 #### Changelog
 ##### V1.1 (2018-06-17)
