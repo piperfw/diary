@@ -28,6 +28,6 @@ Greater stability and more features may be implemented in the future.
 
 #### Changelog
 ##### V1.1 (2018-06-17)
-- Events now stored as JSON array instead of JSON object
+- Events now stored as a JSON array instead of a JSON object
 - Can now have aritrary many events with the same title (or time, date etc.)
 - No longer breaks if `event.json` contains an empty JSON array (i.e. user has no events)
