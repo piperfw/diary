@@ -7,6 +7,7 @@ Small diary/calendar script for the Bash shell. Written in python3.
 - Run `diary -a` from the command line to add a new event to the events file
 - `diary X` prints events in the diary occurring in the next `X` days (default 7)
 - `diary -h` prints a summary of the usage and set-up
+- `diary -s` saves _all_ events in the diary to a text file in a nice format
 
 #### Set-up
 - Ensure `diary.py`, `events.json` and `usage` are in the same directory
@@ -22,11 +23,14 @@ Note: There is currently no way to delete events using the script, but a call to
 
 #### Planned Features
 - `-d` option to delete events (for example, all events in the past)
-- `-s` option to save events in a file in a human readable format
 - `-v` option to display version
+- Use a configuration file to set `SCRIPT_DIR` 
+- Option to use different date formats when in `-a` mode
 
 #### Changelog
 ##### V1.1 (2018-06-17)
 - Events now stored as a JSON array instead of a JSON object
 - Can now have aritrary many events with the same title (or time, date etc.)
 - No longer breaks if `event.json` contains an empty JSON array (i.e. user has no events)
+##### V1.2 (2018-06-22)
+- Added `-s` option to saved events to `saved_events` in a human readable format. Events are grouped by year.
