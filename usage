@@ -15,11 +15,15 @@ OPTIONS
 	-h, --help
 		Display this page.
 
+	-s, --save
+		Save all diary events in a human readable format to the text file 
+		\x1B[3mSCRIPT_DIR/saved_diary\x1B[23m (see setup below).
+		If this file already exists, a number will be appended prior to saving.
+
 SETUP
-- Ensure diary.py, events.json and this .txt are in the same directory.
+- Ensure diary.py, events.json and this file are in the same directory.
 - Change the SCRIPT_DIR class variable at the top of Diary class in diary.py to this directory
 - Create a bash alias by adding the following line to your ~/.bashrc
 alias diary="python SCRIPT_DIR/diary.py"
 (Otherwise 'python SCRIPT_DIR/diary.py' must be used to run the program).
-Here SCRIPT_DIR must be entered \x1B[3mexplicitly\x1B[23m and python should be replaced with
-python3 if appropiate.
+Here SCRIPT_DIR must be entered \033[1mexplicitly\033[0m and python replaced with python3 if appropriate.
