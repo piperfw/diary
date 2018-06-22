@@ -19,8 +19,9 @@ alias diary="python full_path_to_diary.py"
 For example, `alias diary="python /home/username/diary-folder/diary.py"` 
 (here `python` is your python 3 executable - `python3` on some systems). 
 
-Note: There is currently no way to delete events using the script, but a call to `diary` will never display events in the past.
-
+Notes: 
+- There is currently no way to delete events using the script, but a call to `diary` will never display events in the past.
+- The `events.json` file _must_ exist and contain _at least_ an empty JSON array, '`[]`'
 #### Planned Features
 - `-d` option to delete events (for example, all events in the past)
 - `-v` option to display version
@@ -31,6 +32,6 @@ Note: There is currently no way to delete events using the script, but a call to
 ##### V1.1 (2018-06-17)
 - Events now stored as a JSON array instead of a JSON object
 - Can now have aritrary many events with the same title (or time, date etc.)
-- No longer breaks if `event.json` contains an empty JSON array (i.e. user has no events)
+- No longer breaks if `event.json` contains an empty JSON array (i.e. user has no events).
 ##### V1.2 (2018-06-22)
 - Added `-s` option to saved events to `saved_events` in a human readable format. Events are grouped by year.
