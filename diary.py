@@ -401,7 +401,7 @@ def main():
 		print(usage_message)
 	elif option == '-s' or option == '--save':
 		Diary().present_or_save_diary(save=True)
-	elif option == '-a' or option == '--add-event':
+	elif option == '-a' or option == '--add':
 		# 'Interactive mode' - add an event to the diary
 		title = Diary.get_non_empty_input('Event title:')
 		date = Diary.get_non_empty_input('Date (yyyy-mm-dd):')
