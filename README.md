@@ -29,6 +29,7 @@ Notes:
 - Option to use different date formats when in `-a` mode
 
 #### Changelog
+##### V1.0 (2018-06-08)
 ##### V1.1 (2018-06-17)
 - Events now stored as a JSON array instead of a JSON object
 - Can now have arbitrary many events with the same title (or time, date etc.)
