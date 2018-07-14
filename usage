@@ -1,4 +1,4 @@
-DIARY(1)
+DIARY
 
 NAME
 	diary - print events from diary in the coming week
@@ -8,9 +8,15 @@ OPTIONS
 	-a, --add
 		Enter an interactive mode to add a new event to the diary.
 
+	-d, --delete \x1B[3mnum\x1B[23m
+		Remove events from the diary within \x1B[3mnum\x1B[23m days of today's date.
+	 	\x1B[3mnum\x1B[23m must be an integer (0 for events occurring today) and there should
+	 	be a space between it and the option specifier. A confirmation dialogue
+	 	will be shown with the events to be deleted.
+
 	\x1B[3mnum\x1B[23m
-		Print events from diary in the next \x1B[3mnum\x1B[23m day(s).
-	 	\x1B[3mnum\x1B[23m must be a non-negative integer (0 for events remaining today).
+		Print events from diary within \x1B[3mnum\x1B[23m days of today's date.
+	 	\x1B[3mnum\x1B[23m must be an integer (0 for events occurring today).
 
 	-h, --help
 		Display this message.
@@ -19,6 +25,9 @@ OPTIONS
 		Save all diary events in a human readable format to the text file 
 		\x1B[3mSCRIPT_DIR/saved_diary\x1B[23m (see setup below).
 		If this file already exists, a number will be appended prior to saving.
+
+	-v, --version
+		Print the version of the program.
 
 SETUP
 - Ensure diary.py, events.json and usage are in the same directory.

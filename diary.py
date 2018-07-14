@@ -2,9 +2,8 @@ import json
 import datetime
 import re, sys, os, logging
 
-# TODO:
+# Possible features
 # Additional fields: Duration, description and company
-# Delete functionality
 # Configuration file; option for different date formats
 
 # level=logging.INFO for more information
@@ -32,6 +31,9 @@ class Diary:
 	# List of entries required for an event (may be empty strings). The time & date must also have correct formatting.
 	# Additional entries are ignored
 	REQUIRED_KEYS = ['title', 'date', 'time', 'location']
+	# Version of program
+	VERSION = 1.3
+
 
 	@staticmethod
 	def get_non_empty_input(prompt):
@@ -45,11 +47,23 @@ class Diary:
 			user_input = input()
 		return user_input
 
+	@staticmethod
+	def check_int(str_to_check):
+		"""Static method to check whether a string str is an integer (non-negative or negative).
+
+		:return: .isdigit() : boolean
+		"""
+		if str_to_check[0] in ('-', '+'):
+		    return str_to_check[1:].isdigit()
+		return str_to_check.isdigit()
+
 	def __init__(self, num_days=7, **kwargs):
 		# Number of days to print events for, including today, if applicable. Default 7 (one week).
 		self.num_days = num_days
 		# List of dictionaries obtained from EVENTS_FILE. Each dictionary represents an event.
 		self.events = []
+		# List of events to remove from self.events, if the --delete option was specified
+		self.events_to_delete = []
 		# If not empty, kwargs is a dictionary describing an event to be added to EVENTS_FILE. This must be syntax checked.
 		self.new_event_dict = kwargs
 		# Deserialize EVENTS_FILE: JSON array --> python list == self.events
@@ -68,13 +82,16 @@ class Diary:
 					# with contents of self.events (could allow program to continue if not self.new_event_dict).
 					sys.exit(1)					
 
-	def present_or_save_diary(self, present=False, save=False):
+	def present_or_save_or_delete_diary(self, present=False, save=False, delete=False):
 		"""Master function to invoke other member functions on current instantiation. Called from main().
 
 		If save is True, save diary in a human readable format; save_diary() called.
 		If present is True, print diary to terminal in a human readable format; present_diary() called.
+		If delete is True, prompt user with events to be removed from the diary.
 
-		In either case, the events must firstly be sorted via calls to make_all_date_time() and sort_diary().
+		Due to the way in which this function is called in main(), these options are mutually exclusive.
+
+		In any case, the events must firstly be sorted via calls to make_all_date_time() and sort_diary().
 		"""
 		# Generate a datetime key-value pair for each event in self.events (key = 'event_datetime').
 		self.make_all_date_time()
@@ -89,7 +106,12 @@ class Diary:
 			logger.info('Functionality to run: Save diary to text file.')
 			# Save diary to a text file in a human readable format.
 			self.save_diary()
-
+		# if delete_interactive:
+		# 	logger.info('Functionality to run: Possibly delete events from the diary.')
+		# 	# Prompt the user for the 
+		if delete:
+			logger.info('Functionality to run: Possibly delete events occurring within {} days.'.format (self.num_days))
+			self.delete_events()
 
 	def read_events_file(self):
 		"""Deserialise EVENTS_FILE. JSON array --> Python list (self.events) 
@@ -175,14 +197,14 @@ class Diary:
 
 	def present_diary(self):
 		"""Print diary entries from today to today + num_days in a nice format."""
-		# Truncate self.events according to events that occur from today until today + num_days
+		# Truncate self.events according to events that occur from today until today + num_days (see self.truncate_diary
+		# for details when num_days is negative).
 		self.truncate_diary()
-		# Construct string to format diary, depending on num_days
+		# Construct string to format diary, depending on the number of days and the remaining number of events.
 		num_events = len(self.events)
-		if num_events == 1:
-			str_to_print = '\nYou have {} event'.format(num_events)
-		else:
-			str_to_print = '\nYou have {} events'.format(num_events)
+		str_to_print = '\nYou have {} event'.format(num_events)
+		if num_events not in {-1,1}:
+			str_to_print += 's'
 		if self.num_days == 0:
 			str_to_print += ' remaining today.\n\n'
 		elif self.num_days == 1:
@@ -193,8 +215,15 @@ class Diary:
 			str_to_print += ' in the coming month.\n\n'
 		elif self.num_days == 365:
 			str_to_print += ' in the coming year.\n\n'
-		else:
+		elif self.num_days > 0:
 			str_to_print += ' in the next {} days.\n\n'.format(self.num_days)
+		elif self.num_days == -1:
+			str_to_print += ' remaining in your diary from today and yesterday.\n\n'.format(self.num_days)
+		else:
+			str_to_print += ' remaining in your diary from the previous {} days.\n\n'.format(abs(self.num_days))
+		if num_events == 0:
+			# Remove the newline characters if there are no events.
+			str_to_print = str_to_print[1:-2]
 		# Add formatted string describing event, for each remaining event
 		for event_obj in self.events:
 			str_to_print += self.generate_event_string(event_obj, escape_codes=True)
@@ -203,24 +232,46 @@ class Diary:
 
 		# Functionality ~ END ~ (unless save was also True in save_or_print_diary())
 
-	def truncate_diary(self):
-		"""Truncate self.events according to events that fall from NOW to the END of today + num_days
+	def truncate_diary(self, delete=False):
+		"""Truncate self.events according to events that fall from NOW to the END of today + num_days if num_days 
+		is positive, and from the beginning of today - |num_days| to NOW if num_days is negative.
 
 		So num_days = 0 gives events occurring for the REMAINDER of today only, while num_days = 1 gives events
-		occurring in the remainder of today or ANYTIME tomorrow.
+		occurring in the remainder of today or ANYTIME tomorrow. Similarly, num_days = -1 gives events that occurred
+		earlier today or ANYTIME yesterday (and have not been deleted form the library).
+
+		If delete=True, instead truncate self.events_to_delete (set in self.delete_events) AND assign self.events
+		to those events being excluded.
 		"""
-		# To calculate the max_datetime, remove hours/mins from self.today and add one day (which gives the end of 
-		# today), and then add num_days. Hrs, Mins, Secs each default to 0.
-		try:			
+		try:
 			start_of_today = datetime.datetime(self.today.year,self.today.month,self.today.day)
-			max_datetime = start_of_today + datetime.timedelta(days=(self.num_days+1))
-			# List comprehension; datetime of event must be greater than current time/date but less than the maximum.
-			truncated_event_list = [event_obj for event_obj in self.events if 
-				event_obj['event_datetime'] > self.today and event_obj['event_datetime'] < max_datetime]
-			self.events = truncated_event_list
+			if self.num_days >= 0:
+				# To calculate the max_datetime, remove hours/mins from self.today and add one day (which gives the end 
+				# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
+				max_datetime = start_of_today + datetime.timedelta(days=(self.num_days+1))
+				# List comprehension; datetime must be greater than current time/date but less than max_datetime.
+				truncated_event_list = [event_obj for event_obj in self.events if 
+					event_obj['event_datetime'] > self.today and event_obj['event_datetime'] < max_datetime]
+				# Events excluded by the truncation
+				excluded_event_list = [event_obj for event_obj in self.events if 
+					event_obj['event_datetime'] <= self.today and event_obj['event_datetime'] >= max_datetime]
+			else:
+				# To calculate the min_datetime, simply remove the hours/mins from self.today and then add num_days
+				min_datetime = start_of_today + datetime.timedelta(days=(self.num_days))
+				# datetime of event must be less than current time/date but greater than min_datetime.
+				truncated_event_list = [event_obj for event_obj in self.events if 
+					event_obj['event_datetime'] > min_datetime and event_obj['event_datetime'] < self.today]
+				excluded_event_list = [event_obj for event_obj in self.events if 
+					event_obj['event_datetime'] <= min_datetime and event_obj['event_datetime'] >= self.today]
+			if delete:
+				self.events_to_delete = truncated_event_list
+				self.events = excluded_event_list
+			else:
+				self.events = truncated_event_list
 		except (ValueError,OverflowError) as e:
-			# OverflowError occurs if num_days exceeds 999999999 (max timedelta).
+			# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
 			# Value error occurs if max_datetime would have a year exceeding 9999 (a maximum for datetime objects).
+			# Or if min_datetime would have a negative year (?).
 			logger.info(e)
 			logger.error('Number of days to generate diary for is too large, exiting.')
 			sys.exit(1)
@@ -280,6 +331,7 @@ class Diary:
 		# Loop to get y/n response from user. Put in separate method if needed elsewhere.
 		while True:
 			user_input = input()
+			# See delete_events for a slightly nicer way of filtering input for a yes/no question.
 			if user_input == 'y' or user_input == 'Y':
 				# Construct full path to EVENTS_FILE, and a backup file 
 				# (overwrite back up if already exists - consider checking this)
@@ -375,6 +427,45 @@ class Diary:
 
 		# Functionality ~ END ~
 
+	def delete_events(self):
+		# Make a shallow copy of self.events
+		self.events_to_delete = self.events.copy() # Same as using self.events[:]
+		# Truncate self.events according to events that occur with num_days (see self.truncate_diary for implementation)
+		self.truncate_diary(delete=True)
+		# if no events to delete, just exit
+		if (len(self.events_to_delete) == 0):
+			print('No events occurring within specified number of days.')
+			return
+		str_to_print =  'Events to be removed from the diary:\n\n'
+		for event_obj in self.events_to_delete:
+			str_to_print += self.generate_event_string(event_obj, escape_codes=True)
+		# Prompt user to confirm events to be removed from the diary
+		print(str_to_print)
+		user_choice = ''
+		while user_choice not in {'y','Y','n','N'}:
+			user_choice = self.get_non_empty_input('Confirm removal (y/n)')
+		if user_choice in {'y', 'Y'}:
+			# Construct full path to EVENTS_FILE, and a backup file (overwritten if already exists)
+			# Following code is copied from add_event (could refactor this hardly necessary).
+			events_file_path = os.path.join(self.SCRIPT_DIR, self.EVENTS_FILE)
+			backup_file_path = os.path.splitext(events_file_path)[0] + '.bak.json'
+			# Backup events file to a temporary file
+			with open(events_file_path, 'r') as events_file:
+				lines = events_file.readlines()
+			with open(backup_file_path, 'w') as backup_file:
+				logger.info('Creating backup file {}'.format(backup_file_path))
+				for line in lines:
+					backup_file.write(line)
+			# Old events file is now overwritten with self.events, which consists of all events NOT in
+			# self.events_to_delete
+			with open(events_file_path, 'w') as events_file:
+				# Serialize events
+				json.dump(self.events,events_file)
+				# Notify user. Note that, unlike in self.add_event, the backup is not deleted.
+				print('Operation successful. A backup of the old events file can be found in {}.'.format(self.SCRIPT_DIR))
+
+		# Functionality ~ END ~
+
 def main():
 	help_file_path = os.path.join(Diary.SCRIPT_DIR, Diary.MAN_NAME)
 	with open(help_file_path, 'r') as man_page:
@@ -392,15 +483,19 @@ def main():
 	else:
 		option = sys.argv[1]
 	# Check whether additional argument is a string consisting of digits ONLY
-	if option.isdigit():
+	# if option.isdigit():
+	# Check whether additional argument is a (signed) int
+	if Diary.check_int(option):
 		# If so, convert to int & create anonymous Diary() object and call present diary()
 		# Could make present flag a member variable (would just move it into Diary() argument)
-		Diary(num_days=int(option)).present_or_save_diary(present=True)
+		Diary(num_days=int(option)).present_or_save_or_delete_diary(present=True)
+	# Otherwise check whether option variable is one of the four permitted options (for a more general way of doing
+	# this, see rainbow.py).
 	elif option == '-h' or option == '--help':
 		# Print message in usage
 		print(usage_message)
 	elif option == '-s' or option == '--save':
-		Diary().present_or_save_diary(save=True)
+		Diary().present_or_save_or_delete_diary(save=True)
 	elif option == '-a' or option == '--add':
 		# 'Interactive mode' - add an event to the diary
 		title = Diary.get_non_empty_input('Event title:')
@@ -414,7 +509,18 @@ def main():
 		company = ''
 		# Description and Company parameters are currently unused while location is optional.
 		Diary(title=title,date=date,time=time,location=loc,description=desc,company=company).add_event();
-	# If incorrect option notify user. Note: Any extra arguments are ignored.
+	elif option == '-d' or option == '--delete':
+		# With the -d option, another argument must be passed - the number of days to delete events from relative to
+		# now (also assigned to num_days in the constructor of an anonymous object).
+		if len(sys.argv) > 2 and Diary.check_int(sys.argv[2]):
+			# The delete parameter causes Diary,delete_events to be called.
+			Diary(num_days=int(sys.argv[2])).present_or_save_or_delete_diary(delete=True)
+		else:
+			print('Please specify a number of days (signed integer) after the {} option.'.format(option))
+			sys.exit(1)
+	elif option in {'-v', '--version'}:
+		print(Diary.VERSION)
+	# If incorrect option notify user. Note: Any extra arguments are simply ignored.
 	else:
 		print('Incorrect option. See --help for usage.')
 		sys.exit(1)
