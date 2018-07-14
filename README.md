@@ -25,6 +25,7 @@ Notes:
 #### Possible Future Features
 - Configuration file to set `SCRIPT_DIR`, or set interactively
 - Option to use different date formats
+- Additional fields such as event description, duration and company
 
 #### Changelog
 ##### V1.0 (2018-06-08)
