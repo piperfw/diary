@@ -23,7 +23,8 @@ For example, `alias diary="python /home/username/diary-folder/diary.py"`
 Notes: 
 - The `events.json` file _must_ exist and contain _at least_ an empty JSON array, '`[]`'
 #### Possible Future Features
-- Configuration file to set `SCRIPT_DIR`, or set interactively
+- Ability to edit events in the diary
+- 'Repeat' field to have events automatically repeat after a certain number of hours/days
 - Option to use different date formats
 - Additional fields such as event description, duration and company
 
