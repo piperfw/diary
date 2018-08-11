@@ -3,15 +3,11 @@ import datetime
 import re, sys, os, logging
 
 # level=logging.INFO for more information
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s:%(name)s:%(levelname)s: %(message)s',
-	datefmt='%d/%m/%Y %H:%M:%S')
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s:%(levelname)s: %(message)s',
+	datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__file__)
 
 class Diary:
-	# Path to directory containing diary.py, EVENTS_FILE, MAN_NAME
-	# ~~~~~~ TO EDIT ~~~~~~~~ #
-	SCRIPT_DIR = '/home/user/example_directory/'
-	# ~~~~~~ TO EDIT ~~~~~~~~ #
 	# .json file containing a JSON array. Each element of this array is a dictionary representing an event.
 	# Each event dictionary has key-value pairs describing event title,  date, time and location.
 	# This file should be present in script directory else a full path specified here (same applies for 
@@ -116,10 +112,10 @@ class Diary:
 		 date, time and location of an event.
 		"""
 		# Full path of EVENTS_FILE
-		events_file_path = os.path.join(self.SCRIPT_DIR, self.EVENTS_FILE)
+		events_file_path = os.path.join(os.path.dirname(__file__), self.EVENTS_FILE)
 		# If no events file exists, create it 
 		if not os.path.isfile(events_file_path):
-			string_to_print = '{} not a file in {}. '.format(self.EVENTS_FILE, self.SCRIPT_DIR)
+			string_to_print = '{} not a file in {}. '.format(self.EVENTS_FILE, os.path.dirname(__file__))
 			# Extra: check that it's not a directory! (An exception would probably be thrown if tried to open a dir)
 			if os.path.isdir(events_file_path):
 				str_to_print += 'It is a directory. Please correct this.'
@@ -331,7 +327,7 @@ class Diary:
 			if user_input == 'y' or user_input == 'Y':
 				# Construct full path to EVENTS_FILE, and a backup file 
 				# (overwrite back up if already exists - consider checking this)
-				events_file_path = os.path.join(self.SCRIPT_DIR, self.EVENTS_FILE)
+				events_file_path = os.path.join(os.path.dirname(__file__), self.EVENTS_FILE)
 				backup_file_path = os.path.splitext(events_file_path)[0] + '.bak.json'
 				# Backup events file to a temporary file
 				with open(events_file_path, 'r') as events_file:
@@ -365,7 +361,7 @@ class Diary:
 		"""Save diary to SAVE_FILE (possibly with an appended digit) in a human readable format"""
 
 		# Starting full path of SAVE_FILE N.B. SAVE_FILE has no .txt extension
-		save_file_path = os.path.join(self.SCRIPT_DIR, self.SAVE_FILE)		
+		save_file_path = os.path.join(os.path.dirname(__file__), self.SAVE_FILE)		
 		# Construct string to write to file
 		str_to_write = ('Diary saved on ' + datetime.datetime.strftime(self.today, "%Y-%m-%d")	
 		+ ' at ' + datetime.datetime.strftime(self.today, "%H:%M:%S") + '\n\n')
@@ -408,7 +404,7 @@ class Diary:
 		while os.path.exists(save_file_path):
 			logger.info('{} exists. Adding {}.'.format(save_file_path,digit))
 			# Reset path name
-			save_file_path = os.path.join(self.SCRIPT_DIR, self.SAVE_FILE)
+			save_file_path = os.path.join(os.path.dirname(__file__), self.SAVE_FILE)
 			# Add digit to path name
 			save_file_path += str(digit)
 			# Increment digit in case next loop is run
@@ -443,7 +439,7 @@ class Diary:
 		if user_choice in {'y', 'Y'}:
 			# Construct full path to EVENTS_FILE, and a backup file (overwritten if already exists)
 			# Following code is copied from add_event (could refactor this hardly necessary).
-			events_file_path = os.path.join(self.SCRIPT_DIR, self.EVENTS_FILE)
+			events_file_path = os.path.join(os.path.dirname(__file__), self.EVENTS_FILE)
 			backup_file_path = os.path.splitext(events_file_path)[0] + '.bak.json'
 			# Backup events file to a temporary file
 			with open(events_file_path, 'r') as events_file:
@@ -458,12 +454,12 @@ class Diary:
 				# Serialize events
 				json.dump(self.events,events_file)
 				# Notify user. Note that, unlike in self.add_event, the backup is not deleted.
-				print('Operation successful. A backup of the old events file can be found in {}.'.format(self.SCRIPT_DIR))
+				print('Operation successful. A backup of the old events file can be found in {}.'.format(os.path.dirname(__file__)))
 
 		# Functionality ~ END ~
 
 def main():
-	help_file_path = os.path.join(Diary.SCRIPT_DIR, Diary.MAN_NAME)
+	help_file_path = os.path.join(os.path.dirname(__file__), Diary.MAN_NAME)
 	with open(help_file_path, 'r') as man_page:
 		# usage_message = repr("\n".join(man_page.readlines())) # Investigate why escape codes to underline aren't working
 		# It appears that python is escaping the backslashes, so these are escaped in the shell too.
