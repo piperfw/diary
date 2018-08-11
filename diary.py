@@ -10,11 +10,9 @@ logger = logging.getLogger(__file__)
 class Diary:
 	# .json file containing a JSON array. Each element of this array is a dictionary representing an event.
 	# Each event dictionary has key-value pairs describing event title,  date, time and location.
-	# This file should be present in script directory else a full path specified here (same applies for 
-	# SCRIPT_NAME, MAN_NAME and SAVE_FILE).
+	# This file should be present in script directory else a relative path specified here (same applies for 
+	# MAN_NAME and SAVE_FILE).
 	EVENTS_FILE = 'events.json'
-	# Name of this script minus .py extension.
-	SCRIPT_NAME = 'diary'
 	# Name of help text file.
 	MAN_NAME = 'usage'
 	# Name of text file to which events should be saved; will be created if non-existent.
