@@ -113,16 +113,16 @@ class Diary:
 		events_file_path = os.path.join(os.path.dirname(__file__), self.EVENTS_FILE)
 		# If no events file exists, create it 
 		if not os.path.isfile(events_file_path):
-			string_to_print = '{} not a file in {}. '.format(self.EVENTS_FILE, os.path.dirname(__file__))
+			str_to_print = '{} not a file in {}. '.format(self.EVENTS_FILE, os.path.dirname(__file__))
 			# Extra: check that it's not a directory! (An exception would probably be thrown if tried to open a dir)
 			if os.path.isdir(events_file_path):
 				str_to_print += 'It is a directory. Please correct this.'
-				logger.error(string_to_print)
+				logger.error(str_to_print)
 				sys.exit(1)
 			else:
 				str_to_print += 'Creating file.'
 				print(str_to_print)
-				logger.info(string_to_print)
+				logger.info(str_to_print)
 		# Open .json for reading and deserialise using json.load
 		with open(events_file_path, 'r') as events_file:
 			try:
