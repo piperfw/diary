@@ -28,10 +28,31 @@ class Diary:
 	LONG_DATE_FORMAT = '%a, %b %d'
 	LONG_TIME_FORMAT = '%H:%M'
 
-	ALLOWED_OPTIONS = {'help':False, 'add-event':False, 'version': False, 'save-diary':False}
-	ALLOWED_OPTIONS_WITH_PARAMETER = {'delete': None, 'present': None}
-	OPTION_ABBREVIATIONS = {'h':'help', 'd':'delete', 'a':'add-event', 's':'save-diary', 'v':'version'}
-
+	ALLOWED_OPTIONS = {
+		'help':False,
+		'add-event':False,
+		'version': False,
+		'save-diary':False
+	}
+	ALLOWED_OPTIONS_WITH_PARAMETER = {
+		'delete': None,
+		'present': None
+	}
+	OPTION_ABBREVIATIONS = {
+		'h':'help',
+		'd':'delete',
+		'a':'add-event',
+		's':'save-diary',
+		'v':'version'
+	}
+	OPTION_FUNCTION_NAMES = {
+		'help': 'print_usage',
+		'version': 'print_version',
+		'present': 'present_diary',
+		'add-event': 'add_event',
+		'save-diary': 'save_diary',
+		'delete': 'delete_events'
+	}
 	USAGE = """Todo"""
 
 	@staticmethod
@@ -40,21 +61,18 @@ class Diary:
 		:return: .isdigit() : boolean
 		"""
 		if str_to_check[0] in ('-', '+'):
-		    return str_to_check[1:].isdigit()
+			return str_to_check[1:].isdigit()
 		return str_to_check.isdigit()
 
 
-	def __init__(self, options):
-		# Dictionary of options passed as command line arguments
-		self.options = options
-		# self.unset_options_to_defaults()
-		# if self.had_to_print_help_or_version():
-		# 	return
+	def __init__(self, option):
+		# Dictionary containing a single key-value pair describing the option passed as a command line argument.
+		self.option = option
 		# Full path to events file.
 		self.events_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), self.EVENTS_FILE_RELATIVE))
-		# Datetime format used when user adds events. Datetimes are always stored in ISO format.
+		# Datetime format used to present or add events. Datetimes are always stored as an ISO formatted string.
 		self.datetime_format = ' '.join([self.DATE_FORMAT, self.TIME_FORMAT])
-		# List of dictionaries obtained from EVENTS_FILE. Each dictionary represents an event.
+		# List of dictionaries obtained from self.EVENTS_FILE_RELATIVE. Each dictionary represents an event.
 		self.events = []
 		# List of events to remove from self.events, if the --delete option was specified
 		self.events_to_delete = []
@@ -63,58 +81,39 @@ class Diary:
 		# Check each event in EVENTS_FILE has the required keys
 		if not self.check_event_keys():
 			return
+		# Sort self.events according to the 'ISO' key.
 		self.sort_events_list()
-		# Today's date and time (datetime structure).
+		# Current date and time (equivalent to now()).
 		self.today = datetime.datetime.today()
+		# Based the chosen option in self.option, call an appropriate function.
 		self.choose_and_execute_function()
 
 	def choose_and_execute_function(self):
-		option_functions = {
-			'help': self.print_usage,
-			'version': self.print_version,
-			'present': self.present_diary,
-			'add-event': self.add_event,
-			'save-diary': self.save_diary,
-			'delete': self.delete_events
-		}
-		for option, func in option_functions.items():
-			if option in self.options:
-				func()
-				return
+		"""Call the function associated with the first key in self.option."""
+		try:			
+			# Get the first (and only) key from self.option (StopIteration is self.option is empty).
+			option_key = next(iter(self.option))
+			# Get the function name associated with that key (KeyError if option_key not in self.OPTION_FUNCTION_NAMES).
+			function_name = self.OPTION_FUNCTION_NAMES[option_key]
+			# Could just use getattr (AttributeError if doesn't exist) but AttributeError may also occur in function_name().
+			if hasattr(self, function_name):
+				# Call the function
+				function_name()
+			else:
+				logger.error('Function {} is missing from {}.'.format(function_name, self.__class__.__name__))
+			getattr(self, function_name)()
+		except StopIteration:
+			logger.error('No option passed to constructor.')
+		except KeyError:
+			logger.error('No functionality is associated with the option \'{}\'.'.format(option_key))
 
 	def print_usage(self):
+		"""Print usage (help) message."""
 		print(self.USAGE)
 
 	def print_version(self):
+		"""Print script name (minus extension) and version number."""
 		print('{} {}'.format(os.path.splitext(os.path.basename(__file__))[0], self.VERSION))
-
-	def unset_options_to_defaults(self):
-		"""Option values in self.options that were NOT provided by command line arguments are set to the default values
-		given in self.ALLOWED_OPTIONS and self.ALLOWED_OPTIONS_WITH_PARAMTER.
-		"""
-		for option_name, default_value in self.ALLOWED_OPTIONS.items():
-			if option_name not in self.options:
-				self.options[option_name] = default_value
-		for option_name, default_value in self.ALLOWED_OPTIONS_WITH_PARAMETER.items():
-			if option_name not in self.options:
-				self.options[option_name] = default_value
-
-	def had_to_print_help_or_version(self):
-		if self.options['help']:
-			print(self.USAGE)
-			return True
-		if self.options['version']:
-			print('{} {}'.format(os.path.splitext(os.path.basename(__file__))[0], self.VERSION))
-			return True
-		return False
-
-	def able_to_convert_option_str_to_int(self, option_key):
-		try:
-			self.options[option_key] = int(self.options[option_key])
-			return True
-		except ValueError:
-			logger.error('Number of days must be an integer.')
-			return False
 
 	def read_events_file(self):
 		"""Deserialise EVENTS_FILE. JSON array --> Python list (self.events) 
@@ -319,12 +318,15 @@ class Diary:
 
 	def delete_events(self):
 		# Truncate self.events according to events that occur with num_days (see self.truncate_diary for implementation)
-		if not self.able_to_convert_option_str_to_int('delete'):
+		try:
+			num_days = int(self.option['delete'])
+		except ValueError:
+			print('Number of days must be an integer.')
 			return
-		self.truncate_diary(num_days=self.options['delete'], delete=True)
+		self.truncate_diary(num_days=self.option['delete'], delete=True)
 		# if no events to delete, just exit
 		if (len(self.events_to_delete) == 0):
-			logger.info('No in diary within {} days of now.'.format(self.options['delete']))
+			logger.info('No in diary within {} days of now.'.format(num_days))
 			print('Nothing to delete.')
 			return
 		if self.user_wants_removal():
@@ -347,9 +349,12 @@ class Diary:
 		"""Print diary entries from today to today + num_days in a nice format."""
 		# Truncate self.events according to events that occur from today until today + num_days (see self.truncate_diary
 		# for details when num_days is negative).
-		if not self.able_to_convert_option_str_to_int('present'):
+		try:
+			num_days = int(self.option['present'])
+		except ValueError:
+			print('Number of days must be an integer.')
 			return
-		self.truncate_diary(num_days=self.options['present'])
+		self.truncate_diary(num_days=num_days)
 		# Construct string to format diary, depending on the number of days and the remaining number of events.
 		num_events = len(self.events)
 		str_to_print = 'You have {} event'.format(num_events)
@@ -363,12 +368,12 @@ class Diary:
 			365: ' in the coming year.',
 			-1: ' in your diary from today and yesterday.'
 			}
-		if self.options['present'] in special_day_strings:
-			str_to_print += special_day_strings[self.options['present']]
-		elif self.options['present'] > 0:
-			str_to_print += ' in the next {} days.'.format(self.options['present'])
+		if num_days in special_day_strings:
+			str_to_print += special_day_strings[num_days]
+		elif num_days > 0:
+			str_to_print += ' in the next {} days.'.format(num_days)
 		else:
-			str_to_print += ' in your diary from the previous {} days.'.format(abs(self.options['present']))
+			str_to_print += ' in your diary from the previous {} days.'.format(abs(num_days))
 		if num_events > 0:
 			str_to_print += '\n\n'
 		# Add formatted string describing event, for each remaining event
@@ -438,34 +443,37 @@ class Diary:
 def main():
 	# Remove first sys.argv, which is always pwmgr.py.
 	del sys.argv[0]
-	# List to hold options (command line arguments) provided by user.
-	options = {}
+	# Dictionary to hold option (command line arguments) provided by user - only one option (+ parameter) is accepted.
+	option = {}
+	# Default behaviour (no option passed) is option 'present' with a value of 7
 	if len(sys.argv) == 0:
-		sys.argv.append('7')
-	if Diary.check_int(sys.argv[0]):
-		options['present'] = sys.argv[0]
-		del sys.argv[0]
-	while sys.argv:
+		option['present'] = 7
+	# If first argument may be interpreted as an integer, option is 'present' with that value
+	elif Diary.check_int(sys.argv[0]):
+		option['present'] = int(sys.argv[0])
+	# Otherwise option is prefixed by - (short option) or -- (long option).
+	else:
 		arg = sys.argv.pop(0)
-		stripped_arg = arg.strip('-')
-		if arg.startswith('-') and stripped_arg in Diary.OPTION_ABBREVIATIONS:
+		option_name = arg.strip('-')
+		if arg.startswith('-') and option_name in Diary.OPTION_ABBREVIATIONS:
+			# Make into long option (prefix of '--').
 			arg = '-' + arg
-			stripped_arg = Diary.OPTION_ABBREVIATIONS[stripped_arg]
-		if arg.startswith('--') and stripped_arg in Diary.ALLOWED_OPTIONS:
-			options[stripped_arg] = True
-		elif arg.startswith('--') and stripped_arg in Diary.ALLOWED_OPTIONS_WITH_PARAMETER:
+			# Look up option name in dictionary of abbreviations.
+			option_name = Diary.OPTION_ABBREVIATIONS[option_name]
+		if arg.startswith('--') and option_name in Diary.ALLOWED_OPTIONS:
+			# ALLOWED_OPTIONS are simply True or False.
+			option[option_name] = True
+		elif arg.startswith('--') and option_name in Diary.ALLOWED_OPTIONS_WITH_PARAMETER:
+			# OPTIONS_WITH_PARAMETER must be followed by a parameter (another string).
 			try:
-				options[stripped_arg] = sys.argv.pop(0)
+				option[stripped_arg] = sys.argv.pop(0)
 			except IndexError:
 				print('The {} option requires a parameter.'.format(arg.strip('-')))
-				sys.exit(1)
+				return
 		else:
 			print('Invalid argument. See --help for usage.')
-			sys.exit(1)
-	if len(options) > 1:
-		print('Please specify one option only.')
-	else:
-		Diary(options)
+			return
+	Diary(option)
 
 if __name__ == '__main__':
 	main()
