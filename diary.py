@@ -50,8 +50,8 @@ class Diary:
 		'version': 'print_version',
 		'present': 'present_diary',
 		'add-event': 'add_event',
-		'save-diary': 'save_diary',
-		'delete': 'delete_events'
+		'delete': 'delete_events',
+		'save-diary': 'save_diary'
 	}
 	USAGE = """Todo"""
 
@@ -76,17 +76,63 @@ class Diary:
 		self.events = []
 		# List of events to remove from self.events, if the --delete option was specified
 		self.events_to_delete = []
-		# Deserialize EVENTS_FILE: JSON array --> python list == self.events
+		# Deserialize EVENTS_FILE_RELATIVE: JSON array --> python list == self.events
 		self.read_events_file()
-		# Check each event in EVENTS_FILE has the required keys
+		# Check each event in EVENTS_FILE_RELATIVE has the keys in REQUIRED_KEYS.
 		if not self.check_event_keys():
+			# Exit if event is missing a key (fatal).
 			return
 		# Sort self.events according to the 'ISO' key.
 		self.sort_events_list()
 		# Current date and time (equivalent to now()).
-		self.today = datetime.datetime.today()
+		self.now = datetime.datetime.today()
 		# Based the chosen option in self.option, call an appropriate function.
 		self.choose_and_execute_function()
+
+	def read_events_file(self):
+		"""Deserialise EVENTS_FILE_RELATIVE. JSON array --> Python list (self.events) 
+
+		self.events is a list of dicts whose key-values are strings describing the title,
+		 date, time and location of an event.
+		"""
+		# Firstly check self.events_file_path isn't a directory.
+		if os.path.isdir(self.events_file_path):
+			logger.error('{} is a directory. Aborting.'.format(self.events_file_path))
+			sys.exit(1)
+		# If no events file exists, create it.
+		if not os.path.isfile(self.events_file_path):
+			logger.info('{} does not exist. Creating file.'.format(self.events_file_path))
+			# An empty file is not a valid JSON document, so insert an empty JSON array.
+			with open(self.events_file_path, 'w') as events_file:
+				json.dump([], events_file)
+			return
+		# Open .json for reading and deserialise using json.load
+		with open(self.events_file_path, 'r') as events_file:
+			try:
+				self.events = json.load(events_file)
+			except json.JSONDecodeError as e:
+				logger.error('{} is not a valid JSON document. No events loaded.'.format(self.events_file_path))
+				logger.info('Note: an empty file is not valid (minimum is a file containing an empty JSON array \'[]\'.')
+				# Could sys.exit(1) here but not necessary; self.events is just left empty
+
+	def check_event_keys(self):
+		# Check each event in self.EVENTS_FILE_RELATIVE at least has the keys set out in self.REQUIRED_KEYS
+		for event_dict in self.events:
+			for required_key in self.REQUIRED_KEYS:
+				if required_key not in event_dict:
+					logger.error('Event {} in {} is missing a {}. Exiting.'.format(event_dict, self.EVENTS_FILE, required_key))
+					# Don't just remove event and continue as add_event() may be called, and this overwrites EVENTS_FILE
+					# with contents of self.events (could allow program to continue if not self.new_event_dict).
+					return False
+		return True
+	
+	def sort_events_list(self):
+		"""Sort self.events according to the value of the 'ISO' key. This is a string representing a datetime in ISO
+		format (earlier events appear nearer the start of the list).
+		"""
+		# No need to make a datetime.datetime object - ISO formatted strings can be compared/sorted directly.
+		# self.events = sorted(self.events, key=lambda k: self.make_datetime_using_iso_format(k))
+		self.events = sorted(self.events, key=lambda k: k['ISO'])
 
 	def choose_and_execute_function(self):
 		"""Call the function associated with the first key in self.option."""
@@ -97,11 +143,10 @@ class Diary:
 			function_name = self.OPTION_FUNCTION_NAMES[option_key]
 			# Could just use getattr (AttributeError if doesn't exist) but AttributeError may also occur in function_name().
 			if hasattr(self, function_name):
-				# Call the function
-				function_name()
+				# Get and call the function
+				getattr(self, function_name)()
 			else:
 				logger.error('Function {} is missing from {}.'.format(function_name, self.__class__.__name__))
-			getattr(self, function_name)()
 		except StopIteration:
 			logger.error('No option passed to constructor.')
 		except KeyError:
@@ -115,47 +160,90 @@ class Diary:
 		"""Print script name (minus extension) and version number."""
 		print('{} {}'.format(os.path.splitext(os.path.basename(__file__))[0], self.VERSION))
 
-	def read_events_file(self):
-		"""Deserialise EVENTS_FILE. JSON array --> Python list (self.events) 
-
-		self.events is a list of dicts whose key-values are strings describing the title,
-		 date, time and location of an event.
-		"""
-		# If no events file exists, create it 
-		if os.path.isdir(self.events_file_path):
-			logger.error('{} is a directory. Aborting.'.format(self.events_file_path))
-			sys.exit(1)
-		if not os.path.isfile(self.events_file_path):
-			logger.info('{} does not exist. Creating file.'.format(self.events_file_path))
-			with open(self.events_file_path, 'w') as events_file:
-				json.dump([], events_file)
+	def present_diary(self):
+		"""Print diary entries from today to today + self.option['present'] in a nice format.
+		N.B. self.option['present'] may be negative (events in the past)."""
+		try:
+			# Currently handling of sys.argv in main() means self.option['present'] is actually type(int) already. 
+			num_days = int(self.option['present'])
+		except ValueError:
+			print('Number of days must be an integer.')
 			return
-		# Open .json for reading and deserialise using json.load
-		with open(self.events_file_path, 'r') as events_file:
-			try:
-				self.events = json.load(events_file)
-			# except thrown if not a valid JSON document (i.e. formatting error)
-			except json.JSONDecodeError as e:
-				logger.error('{} is not a valid JSON document. No events loaded'.format(self.events_file_path))
-				logger.info('Note: an empty file is not valid (minimum is a file containing an empty JSON array \'[]\'.')
-				# Could sys.exit(1) here but not necessary; self.events is just left empty
-
-	def check_event_keys(self):
-		# Check each event in EVENTS_FILE has the required keys
+		# Truncate self.events according to events that occur from today until today + num_days.
+		self.truncate_event_lists(num_days=num_days)
+		# Construct string to format diary, depending on the number of days and the remaining number of events.
+		num_events = len(self.events)
+		str_to_print = 'You have {} event'.format(num_events)
+		if num_events not in {-1,1}:
+			str_to_print += 's'
+		special_day_strings = {
+			0: ' remaining today.', 
+			1: ' between now and the end of tomorrow.',
+			7: ' in the coming week.',
+			30: ' in the coming month.',
+			365: ' in the coming year.',
+			-1: ' in your diary from today and yesterday.'
+			}
+		if num_days in special_day_strings:
+			str_to_print += special_day_strings[num_days]
+		elif num_days > 0:
+			str_to_print += ' in the next {} days.'.format(num_days)
+		else:
+			str_to_print += ' in your diary from the previous {} days.'.format(abs(num_days))
+		if num_events > 0:
+			str_to_print += '\n\n'
+		# Add formatted string describing event, for each remaining event
 		for event_dict in self.events:
-			for required_key in self.REQUIRED_KEYS:
-				if required_key not in event_dict:
-					logger.error('Event {} in {} is missing a {}. Exiting.'.format(event_dict, self.EVENTS_FILE, required_key))
-					# Don't just remove event and continue as add_event() may be called, and this overwrites EVENTS_FILE
-					# with contents of self.events (could allow program to continue if not self.new_event_dict).
-					return False
-		return True
+			str_to_print += self.generate_event_string(event_dict, escape_codes=True)
+		# Print constructed string to console (escape codes are used to underline the date).
+		print(str_to_print)
 
-	def sort_events_list(self):
-		"""Sort self.events according to the datetime object of each event (earlier events appear nearer the start of the list).
-		"""
-		self.events = sorted(self.events, key=lambda k: k['ISO']) # Can directly sort by datetime string as in ISO format.
-		# self.events = sorted(self.events, key=lambda k: self.make_datetime_using_iso_format(k))
+	def truncate_event_lists(self, num_days, delete=False):
+			"""Truncate self.events according to events that fall from NOW to the END of today + num_days if num_days 
+			is positive, and from the beginning of today - |num_days| to NOW if num_days is negative.
+
+			So num_days = 0 gives events occurring for the REMAINDER of today only, while num_days = 1 gives events
+			occurring in the remainder of today or ANYTIME tomorrow. Similarly, num_days = -1 gives events that occurred
+			earlier today or ANYTIME yesterday (and have not been deleted form the library).
+
+			If delete=True, instead truncate self.events_to_delete (set in self.delete_events) AND assign self.events
+			to those events being excluded.
+			"""
+			# 00:00 on the current day.
+			start_of_today = datetime.datetime(self.now.year, self.now.month, self.now.day)
+			# Lists to populate
+			truncated_event_list = []
+			excluded_event_list = []
+			try:
+				if num_days >= 0:
+					# To calculate max_datetime, remove hours/mins from self.now and add one day (which gives the end 
+					# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
+					max_datetime = start_of_today + datetime.timedelta(days=(num_days+1))
+					min_datetime = self.now
+				else:
+					# To calculate min_datetime, simply remove the hours/mins from self.today and then add num_days (<0)
+					min_datetime = start_of_today + datetime.timedelta(days=(num_days))
+					max_datetime = self.now
+			except (ValueError,OverflowError) as e:
+				# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
+				# Value error occurs if max_datetime would have a year >9999 or <0 (restriction of datetime object).
+				logger.info(e)
+				logger.error('Range of days is too large. Aborting.')
+				sys.exit(1)
+			# HERE
+			for event_dict in self.events:
+				event_datetime = self.get_datetime_from_event_dict(event_dict)
+				# List comprehension; datetime must be greater than current time/date but less than max_datetime.
+				if event_datetime > min_datetime and event_datetime < max_datetime:
+					truncated_event_list.append(event_dict)
+				else:
+					excluded_event_list.append(event_dict)
+			if delete:
+				self.events_to_delete = truncated_event_list
+				self.events = excluded_event_list
+			else:
+				self.events = truncated_event_list
+				# No events to delete.
 
 	def add_event(self):
 		title = self.get_non_empty_input('Event title:')
@@ -272,58 +360,14 @@ class Diary:
 		backup_file_path = self.events_file_path + '.bak'
 		os.remove(backup_file_path)
 
-	def truncate_diary(self, num_days, delete=False):
-		"""Truncate self.events according to events that fall from NOW to the END of today + num_days if num_days 
-		is positive, and from the beginning of today - |num_days| to NOW if num_days is negative.
-
-		So num_days = 0 gives events occurring for the REMAINDER of today only, while num_days = 1 gives events
-		occurring in the remainder of today or ANYTIME tomorrow. Similarly, num_days = -1 gives events that occurred
-		earlier today or ANYTIME yesterday (and have not been deleted form the library).
-
-		If delete=True, instead truncate self.events_to_delete (set in self.delete_events) AND assign self.events
-		to those events being excluded.
-		"""
-		start_of_today = datetime.datetime(self.today.year, self.today.month, self.today.day)
-		truncated_event_list = []
-		excluded_event_list = []
-		try:
-			if num_days >= 0:
-			# To calculate the max_datetime, remove hours/mins from self.today and add one day (which gives the end 
-			# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
-				max_datetime = start_of_today + datetime.timedelta(days=(num_days+1))
-				min_datetime = self.today
-			else:
-				max_datetime = self.today
-				min_datetime = start_of_today + datetime.timedelta(days=(num_days))
-		except (ValueError,OverflowError) as e:
-			# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
-			# Value error occurs if max_datetime would have a year exceeding 9999 (a maximum for datetime objects).
-			# Or if min_datetime would have a negative year (?).
-			logger.info(e)
-			logger.error('Range of days is too large. Aborting.')
-			sys.exit(1)
-
-		for event_dict in self.events:
-			event_datetime = self.get_datetime_from_event_dict(event_dict)
-			# List comprehension; datetime must be greater than current time/date but less than max_datetime.
-			if event_datetime > min_datetime and event_datetime < max_datetime:
-				truncated_event_list.append(event_dict)
-			else:
-				excluded_event_list.append(event_dict)
-		if delete:
-			self.events_to_delete = truncated_event_list
-			self.events = excluded_event_list
-		else:
-			self.events = truncated_event_list
-
 	def delete_events(self):
-		# Truncate self.events according to events that occur with num_days (see self.truncate_diary for implementation)
+		# Truncate self.events according to events that occur with num_days (see self.truncate_event_lists for implementation)
 		try:
 			num_days = int(self.option['delete'])
 		except ValueError:
 			print('Number of days must be an integer.')
 			return
-		self.truncate_diary(num_days=self.option['delete'], delete=True)
+		self.truncate_event_lists(num_days=self.option['delete'], delete=True)
 		# if no events to delete, just exit
 		if (len(self.events_to_delete) == 0):
 			logger.info('No in diary within {} days of now.'.format(num_days))
@@ -345,50 +389,13 @@ class Diary:
 		print(str_to_print)
 		return self.get_bool_from_yn_input('Confirm removal (y/n)')
 
-	def present_diary(self):
-		"""Print diary entries from today to today + num_days in a nice format."""
-		# Truncate self.events according to events that occur from today until today + num_days (see self.truncate_diary
-		# for details when num_days is negative).
-		try:
-			num_days = int(self.option['present'])
-		except ValueError:
-			print('Number of days must be an integer.')
-			return
-		self.truncate_diary(num_days=num_days)
-		# Construct string to format diary, depending on the number of days and the remaining number of events.
-		num_events = len(self.events)
-		str_to_print = 'You have {} event'.format(num_events)
-		if num_events not in {-1,1}:
-			str_to_print += 's'
-		special_day_strings = {
-			0: ' remaining today.', 
-			1: ' between now and the end of tomorrow.',
-			7: ' in the coming week.',
-			30: ' in the coming month.',
-			365: ' in the coming year.',
-			-1: ' in your diary from today and yesterday.'
-			}
-		if num_days in special_day_strings:
-			str_to_print += special_day_strings[num_days]
-		elif num_days > 0:
-			str_to_print += ' in the next {} days.'.format(num_days)
-		else:
-			str_to_print += ' in your diary from the previous {} days.'.format(abs(num_days))
-		if num_events > 0:
-			str_to_print += '\n\n'
-		# Add formatted string describing event, for each remaining event
-		for event_dict in self.events:
-			str_to_print += self.generate_event_string(event_dict, escape_codes=True)
-		# Print constructed string to console (escape codes are used to underline the date).
-		print(str_to_print)
-
 	def save_diary(self):
 			"""Save diary to SAVE_FILE (possibly with an appended digit) in a human readable format"""
 			# Starting full path of SAVE_FILE N.B. SAVE_FILE has no .txt extension
 			save_file_path = os.path.join(os.path.dirname(__file__), self.SAVE_FILE_RELATIVE)		
 			# Construct string to write to file
-			str_to_write = ('Diary saved on ' + datetime.datetime.strftime(self.today, self.DATE_FORMAT)	
-				+ ' at ' + datetime.datetime.strftime(self.today, self.TIME_FORMAT) + '\n\n')
+			str_to_write = ('Diary saved on ' + datetime.datetime.strftime(self.now, self.DATE_FORMAT)	
+				+ ' at ' + datetime.datetime.strftime(self.now, self.TIME_FORMAT) + '\n\n')
 			# Copy of the self.events to be mutated (in case want to use self.events later)
 			copy_events = list(self.events) # COPY NOT JUST ASSIGMENT (otherwise both refer to same list!)
 			# To construct str_to_write, we get the year of the first (earliest) event, then iterate through
