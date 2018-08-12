@@ -12,7 +12,6 @@ Small diary/calendar script for the Bash shell. Written in python3.
 
 #### Set-up
 - Ensure `diary.py`, `events.json` and `usage` are in the same directory
-- Change the `SCRIPT_DIR` class variable at the top of the **Diary** class in `diary.py` to the full path of this directory
 - Create an alias in your `~/.bashrc` with the following line (otherwise the script must be run with `python full_path_to_diary.py`)
 ```sh
 alias diary="python full_path_to_diary.py"
