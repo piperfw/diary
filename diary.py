@@ -30,14 +30,21 @@ class Diary:
 	LONG_DATE_FORMAT = '%a, %b %d'
 	LONG_TIME_FORMAT = '%H:%M'
 
+	ALLOWED_OPTIONS = {'help':False, 'add-event':False, 'version': False}
+	ALLOWED_OPTIONS_WITH_PARAMETER = {'delete': None, 'num_days': 7}
+	OPTION_ABBREVIATIONS = {'h':'help', 'd':'delete', 'a':'add-event', 'v':'version'}
 
+	USAGE = """Todo"""
 	def __init__(self, options):
+		# Dictionary of options passed as command line arguments
+		self.options = options
+		self.unset_options_to_defaults()
+		if self.print_help_or_version() or not self.convert_option_to_int_by_key('num_days'):
+			return
 		# Full path to events file.
 		self.events_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), self.EVENTS_FILE))
 		# Datetime format used when user adds events. Datetimes are always stored in ISO format.
 		self.datetime_format = ' '.join([self.DATE_FORMAT, self.TIME_FORMAT])
-		# Number of days to print events for, including today, if applicable. Default 7 (one week).
-		self.num_days = options['days']
 		# List of dictionaries obtained from EVENTS_FILE. Each dictionary represents an event.
 		self.events = []
 		# List of events to remove from self.events, if the --delete option was specified
@@ -56,8 +63,36 @@ class Diary:
 			return
 		if options['delete']:
 			return
+		# Default behaviour
 		self.present_diary()
 
+	def unset_options_to_defaults(self):
+		"""Option values in self.options that were NOT provided by command line arguments are set to the default values
+		given in self.ALLOWED_OPTIONS and self.ALLOWED_OPTIONS_WITH_PARAMTER.
+		"""
+		for option_name, default_value in self.ALLOWED_OPTIONS.items():
+			if option_name not in self.options:
+				self.options[option_name] = default_value
+		for option_name, default_value in self.ALLOWED_OPTIONS_WITH_PARAMETER.items():
+			if option_name not in self.options:
+				self.options[option_name] = default_value
+
+	def print_help_or_version(self):
+		if self.options['help']:
+			print(self.USAGE)
+			return True
+		if self.options['version']:
+			print(self.VERSION)
+			return True
+		return False
+
+	def convert_option_to_int_by_key(self, option_key):
+		try:
+			self.options[option_key] = int(self.options[option_key])
+			return True
+		except ValueError:
+			logger.error('Number of days must be an integer.')
+			return False
 
 	def read_events_file(self):
 		"""Deserialise EVENTS_FILE. JSON array --> Python list (self.events) 
@@ -86,10 +121,10 @@ class Diary:
 
 	def check_event_keys(self):
 		# Check each event in EVENTS_FILE has the required keys
-		for event_obj in self.events:
+		for event_dict in self.events:
 			for required_key in self.REQUIRED_KEYS:
-				if required_key not in event_obj:
-					logger.error('Event {} in {} is missing a {}. Exiting.'.format(event_obj, self.EVENTS_FILE, required_key))
+				if required_key not in event_dict:
+					logger.error('Event {} in {} is missing a {}. Exiting.'.format(event_dict, self.EVENTS_FILE, required_key))
 					# Don't just remove event and continue as add_event() may be called, and this overwrites EVENTS_FILE
 					# with contents of self.events (could allow program to continue if not self.new_event_dict).
 					return False
@@ -223,14 +258,14 @@ class Diary:
 		truncated_event_list = []
 		excluded_event_list = []
 		try:
-			if self.num_days >= 0:
+			if self.options['num_days'] >= 0:
 			# To calculate the max_datetime, remove hours/mins from self.today and add one day (which gives the end 
 			# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
-				max_datetime = start_of_today + datetime.timedelta(days=(self.num_days+1))
+				max_datetime = start_of_today + datetime.timedelta(days=(self.options['num_days']+1))
 				min_datetime = self.today
 			else:
 				max_datetime = self.today
-				min_datetime = start_of_today + datetime.timedelta(days=(self.num_days))
+				min_datetime = start_of_today + datetime.timedelta(days=(self.options['num_days']))
 		except (ValueError,OverflowError) as e:
 			# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
 			# Value error occurs if max_datetime would have a year exceeding 9999 (a maximum for datetime objects).
@@ -262,22 +297,22 @@ class Diary:
 		str_to_print = '\nYou have {} event'.format(num_events)
 		if num_events not in {-1,1}:
 			str_to_print += 's'
-		if self.num_days == 0:
+		if self.options['num_days'] == 0:
 			str_to_print += ' remaining today.\n\n'
-		elif self.num_days == 1:
+		elif self.options['num_days'] == 1:
 			str_to_print += ' between now and the end of tomorrow.\n\n'
-		elif self.num_days == 7:
+		elif self.options['num_days'] == 7:
 			str_to_print += ' in the coming week.\n\n'
-		elif self.num_days == 30:
+		elif self.options['num_days'] == 30:
 			str_to_print += ' in the coming month.\n\n'
-		elif self.num_days == 365:
+		elif self.options['num_days'] == 365:
 			str_to_print += ' in the coming year.\n\n'
-		elif self.num_days > 0:
-			str_to_print += ' in the next {} days.\n\n'.format(self.num_days)
-		elif self.num_days == -1:
-			str_to_print += ' remaining in your diary from today and yesterday.\n\n'.format(self.num_days)
+		elif self.options['num_days'] > 0:
+			str_to_print += ' in the next {} days.\n\n'.format(self.options['num_days'])
+		elif self.options['num_days'] == -1:
+			str_to_print += ' remaining in your diary from today and yesterday.\n\n'.format(self.options['num_days'])
 		else:
-			str_to_print += ' remaining in your diary from the previous {} days.\n\n'.format(abs(self.num_days))
+			str_to_print += ' remaining in your diary from the previous {} days.\n\n'.format(abs(self.options['num_days']))
 		if num_events == 0:
 			# Remove the newline characters if there are no events.
 			str_to_print = str_to_print[1:-2]
@@ -288,7 +323,36 @@ class Diary:
 		print(str_to_print)
 
 def main():
-	Diary({'add-event':False, 'days':7, 'delete':False})
+	# Remove first sys.argv, which is always pwmgr.py.
+	del sys.argv[0]
+	# List to hold options (command line arguments) provided by user.
+	options = {}
+	arg_iterable = iter(sys.argv)
+	first_arg = next(arg_iterable, '-')
+	if not first_arg.startswith('-'):
+		options['num_days'] = first_arg
+	else:
+		arg_iterable = iter(sys.argv)
+	for arg in arg_iterable:
+		stripped_arg = arg.strip('-')
+		if arg.startswith('-') and stripped_arg in Diary.OPTION_ABBREVIATIONS:
+			arg = '-' + arg
+			stripped_arg = Diary.OPTION_ABBREVIATIONS[stripped_arg]
+		if arg.startswith('--') and stripped_arg in Diary.ALLOWED_OPTIONS:
+			options[stripped_arg] = True
+		elif arg.startswith('--') and stripped_arg in Diary.ALLOWED_OPTIONS_WITH_PARAMETER:
+			parameter = next(arg_iterable, None)
+			if parameter is None:
+				print('The {} option requires a parameter.'.format(arg.strip('-')))
+				sys.exit(1)
+			options[stripped_arg] = parameter
+		else:
+			print('Invalid argument. See -h or --help for usage.')
+			sys.exit(1)
+	if len(options) > 1:
+		print('Please specify one option only.')
+	else:
+		Diary(options)
 
 if __name__ == '__main__':
 	main()
