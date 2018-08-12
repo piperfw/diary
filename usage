@@ -1,10 +1,9 @@
-DIARY
+\u001b[1mDIARY\u001b[21m
 
-NAME
+\u001b[1mNAME\u001b[21m
 	diary - print events from diary in the coming week
 
-OPTIONS
-
+\u001b[1mOPTIONS\u001b[21m
 	-a, --add
 		Enter an interactive mode to add a new event to the diary.
 
@@ -29,9 +28,8 @@ OPTIONS
 	-v, --version
 		Print the version of the program.
 
-SETUP
+\u001b[1mSETUP\u001b[21m
 - Ensure diary.py, events.json and usage are in the same directory.
-- Change the SCRIPT_DIR class variable at the top of Diary class in diary.py to this directory
 - Create a bash alias by adding the following line to your ~/.bashrc
 alias diary="python SCRIPT_DIR/diary.py"
 (Otherwise 'python SCRIPT_DIR/diary.py' must be used to run the program).
