@@ -3,7 +3,7 @@ import datetime
 import re, sys, os, logging
 
 # level=logging.INFO for more information
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s:%(levelname)s: %(message)s',
+logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s: %(message)s',
 	datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__file__)
 
@@ -397,9 +397,10 @@ class Diary:
 		event_str = ''
 		# Create a datetime object for the event (allows creation of date strings with different formats).
 		# Small inefficiency: When adding an event a datetime object is created twice (once before to create iso str).
-		event_datetime =self.get_datetime_from_event_dict(event_dict)
+		event_datetime = self.get_datetime_from_event_dict(event_dict)
 		long_date_str = datetime.datetime.strftime(event_datetime, self.LONG_DATE_FORMAT)
 		long_time_str= datetime.datetime.strftime(event_datetime, self.LONG_TIME_FORMAT)
+
 		if escape_codes:
 			# \033[4m is ANSI code for underlining - could make this a class variable (and add other options).
 			event_str +=  '\033[4m' + long_date_str + '\033[0m\n' + long_time_str + '\t'
@@ -431,7 +432,7 @@ class Diary:
 			# separators=(',',':') to ensure all whitespace is eliminated.
 			json.dump(self.events, events_file, separators=(',', ':'))
 			# Remove backup given serialization successful (possibly leave backup (?))
-			logger.info('Write to {} successful. Removing backup file.'.format(events_file))
+			logger.info('Write to {} successful. Removing backup file.'.format(self.events_file_path))
 
 	def remove_backup_events_file(self):
 		"""Remove the backup file at  self.events_file_path + '.bak'."""
@@ -495,11 +496,7 @@ class Diary:
 					else:
 						# As we know list is sorted, once an event in the next calendar year is found, we can stop 
 						# AND remove all prior events (do not remove events as we go along; this mutates copy_events).
-						# If index=length-1, then this will return an empty list (tested)
-						copy_events = copy_events[index+1:] # Position of colon is essential!
-						# N.B. Previously was deleting events and breaking, but this was dangerous as if all events 
-						# were deleted, copy_events would not exist, and an exception would be thrown when the 
-						# while condition was checked.
+						copy_events = copy_events[index:] # Position of colon is essential!
 						break # Exit for loop.
 					# If all remaining events in copy_events have the same year, the above else will never occur.
 					# In this case we are completely done; so set copy_events = [] to exit the while loop.
