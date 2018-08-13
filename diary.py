@@ -3,32 +3,54 @@ import datetime
 import re, sys, os, logging
 
 # level=logging.INFO for more information
-logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s: %(message)s',
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s:%(levelname)s: %(message)s',
 	datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__file__)
 
 class Diary:
-	# .json file containing a JSON array. Each element of this array is a dictionary representing an event.
-	# Each event dictionary has key-value pairs describing event title,  date, time and location.
-	# This file should be present in script directory else a relative path specified here (same applies for 
-	# MAN_NAME and SAVE_FILE).
-	EVENTS_FILE_RELATIVE = 'events.json'
-	# Name of text file to which events should be saved; will be created if non-existent.
-	# This file will never be overwritten. Instead, a digit will be appended in the case of duplicates (e.g. saved_diary5).
-	SAVE_FILE_RELATIVE = 'saved_diary'
-	# List of entries required for an event (may be empty strings). The time & date must also have correct formatting.
-	# Additional entries are ignored
-	REQUIRED_KEYS = ['title', 'ISO']
-	# Version of program
-	VERSION = 1.3
-	# Formats used when entering a date.
-	DATE_FORMAT = '%Y-%m-%d'
-	TIME_FORMAT = '%H:%M'
-	# Formats used when presenting a date.
-	LONG_DATE_FORMAT = '%a, %b %d'
-	LONG_TIME_FORMAT = '%H:%M'
-	LONG_DATE_ADDITIONAL_YEAR_FORMAT = ' (%Y)'
-
+	"""
+	Class Variables
+	---------------
+	ALLOWED_OPTIONS : dictionary
+		Each key is the full name of a possible command line option as: --key, and its value is the default for
+		that option.
+	ALLOWED_OPTIONS_WITH_PARAMETER : dictionary
+		Each key is the full name of a possible command line option which must be followed by a single parameter as:
+		--key parameter. Its value defines the default value of the parameter.
+	OPTION_ABBREVIATIONS : dictionary
+		Each key is a possible short command line option; -key, and its value is the key of the option in 
+		ALLOWED_OPTIONS or ALLOWED_OPTIONS_WITH_PARAMETER that key is an abbreviation of.
+	OPTION_FUNCTION_NAMES : dictionary
+		Dictionary to act as a look-up table for functions. Each key is an option, and the value the name of the
+		function to be called if that option is chosen (implemented in Diary.choose_and_execute_function).
+	REQUIRED_KEYS : list
+		Keys every event dictionary must have to be valid.
+	EVENTS_FILE_RELATIVE : string
+		Path to the JSON document used to store events (python list of dictionaries -> JSON array of objects), relative
+		to this script.
+	SAVE_FILE_RELATIVE : string
+		Relative path of text file to save diary events to when using the --save-diary option. If this file already
+		exists, a digit will be appended to the file name (see Diary.save_diary).
+	DATE_FORMAT : string (datetime.datetime.strftime directive)
+		Directive used to parse the DATE field entered by user following use of the -a option. 
+		See the official docs for accepted format codes (e.g. '2018-08-13' would be valid for directive %Y-%m-%d').
+	TIME_FORMAT : string (datetime.datetime.strftime directive)
+		Directive used to parse the TIME field entered by user following use of the -a option.
+		(e.g. '11:00' would be valid for directive %H:%M').
+	LONG_DATE_FORMAT : string (datetime.datetime.strftime directive)
+		Directive used when printing a date to the console (or saving to file). Currently, this date is underlined
+		(see Diary.generate_event_string).
+	LONG_TIME_FORMAT : string (datetime.datetime.strftime directive)
+		Directive used when printing a time to the console (or saving to file). Currently, the time is printed below
+		the date (see Diary.generate_event_string).
+	LONG_DATE_ADDITIONAL_YEAR_FORMAT : string (datetime.datetime.strftime directive)
+		Directive used to append a string to the date when printing to the console, if the year is different from 
+		the current year (set this to an empty string if you don't want anything here).
+	VERSION : float
+		Current version of this program.
+	USAGE : string
+		Message displayed with the --help option.
+	"""
 	ALLOWED_OPTIONS = {
 		'help':False,
 		'add-event':False,
@@ -55,6 +77,15 @@ class Diary:
 		'delete': 'delete_events',
 		'save-diary': 'save_diary'
 	}
+	REQUIRED_KEYS = ['title', 'ISO']
+	EVENTS_FILE_RELATIVE = 'events.json'
+	SAVE_FILE_RELATIVE = 'saved_diary'
+	DATE_FORMAT = '%Y-%m-%d'
+	TIME_FORMAT = '%H:%M'
+	LONG_DATE_FORMAT = '%a, %b %d'
+	LONG_TIME_FORMAT = '%H:%M'
+	LONG_DATE_ADDITIONAL_YEAR_FORMAT = ' (%Y)'
+	VERSION = 1.3
 	USAGE = """\u001b[1mDIARY\u001b[21m
 
 \u001b[1mNAME\u001b[21m
@@ -88,7 +119,6 @@ class Diary:
 	-v, --version
 		Display version information.
 """
-
 	@staticmethod
 	def check_int(str_to_check):
 		"""Static method to check whether a string str is an integer (non-negative or negative). Called in main().
@@ -97,7 +127,6 @@ class Diary:
 		if str_to_check[0] in ('-', '+'):
 			return str_to_check[1:].isdigit()
 		return str_to_check.isdigit()
-
 
 	def __init__(self, option):
 		# Dictionary containing a single key-value pair describing the option passed as a command line argument.
@@ -437,7 +466,8 @@ class Diary:
 		# Add year to long_date_str if event does not occur in current year (could do similar grouping to that in 
 		# saved_diary but think would be distracting/superfluous here). Could add parameter last_year and check to
 		# see if event is in a 'new year' (return str, year from this function) but not sure if worth it (bit ugly).
-		if event_datetime.year != self.now.year:
+		# Only do this when using escape codes (i.e. printing to code - should possibly rename this argument).
+		if event_datetime.year != self.now.year and escape_codes:
 			long_date_str += datetime.datetime.strftime(event_datetime, self.LONG_DATE_ADDITIONAL_YEAR_FORMAT)
 		if escape_codes:
 			# \033[4m is ANSI code for underlining - could make this a class variable (and add other options).
