@@ -57,7 +57,7 @@ class Diary:
 
 	@staticmethod
 	def check_int(str_to_check):
-		"""Static method to check whether a string str is an integer (non-negative or negative).
+		"""Static method to check whether a string str is an integer (non-negative or negative). Called in main().
 		:return: .isdigit() : boolean
 		"""
 		if str_to_check[0] in ('-', '+'):
@@ -68,11 +68,11 @@ class Diary:
 	def __init__(self, option):
 		# Dictionary containing a single key-value pair describing the option passed as a command line argument.
 		self.option = option
-		# Full path to events file.
+		# Absolute path to events file.
 		self.events_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), self.EVENTS_FILE_RELATIVE))
 		# Datetime format used to present or add events. Datetimes are always stored as an ISO formatted string.
 		self.datetime_format = ' '.join([self.DATE_FORMAT, self.TIME_FORMAT])
-		# List of dictionaries obtained from self.EVENTS_FILE_RELATIVE. Each dictionary represents an event.
+		# List of dictionaries obtained from self.events_file_path. Each dictionary represents an event.
 		self.events = []
 		# List of events to remove from self.events, if the --delete option was specified
 		self.events_to_delete = []
@@ -116,7 +116,9 @@ class Diary:
 				# Could sys.exit(1) here but not necessary; self.events is just left empty
 
 	def check_event_keys(self):
-		# Check each event in self.EVENTS_FILE_RELATIVE at least has the keys set out in self.REQUIRED_KEYS
+		"""Check each event in self.events_file_path at least has the keys set out in self.REQUIRED_KEYS.
+		:return: boolean
+		"""
 		for event_dict in self.events:
 			for required_key in self.REQUIRED_KEYS:
 				if required_key not in event_dict:
@@ -230,83 +232,138 @@ class Diary:
 				logger.info(e)
 				logger.error('Range of days is too large. Aborting.')
 				sys.exit(1)
-			# HERE
 			for event_dict in self.events:
+				# For each event, generate a datetime object (which itself cannot be serialised). Although ISO strings 
+				# can be directly compared, using datetime objects is convenient to add dates (timedeltas above).
 				event_datetime = self.get_datetime_from_event_dict(event_dict)
-				# List comprehension; datetime must be greater than current time/date but less than max_datetime.
+				# The 'truncated' list contains those events falling between min_datetime and max_datetime.
 				if event_datetime > min_datetime and event_datetime < max_datetime:
 					truncated_event_list.append(event_dict)
 				else:
+					# Other events are added to the excluded list.
 					excluded_event_list.append(event_dict)
+			# In 'delete' mode, the 'truncated' list of events are to be removed from self.events. This is achieved
+			# by assigning self.events to the excluded events list and saving this to the events file.
 			if delete:
-				self.events_to_delete = truncated_event_list
 				self.events = excluded_event_list
+				# Record events to be deleted so user can check them.
+				self.events_to_delete = truncated_event_list
 			else:
+				# Otherwise, in 'present' mode the truncated list is to be presented to the user. We assign the
+				# truncated list to self.events just so we can just iterate through self.events in self.present_diary()
 				self.events = truncated_event_list
-				# No events to delete.
+				# No events to delete - leave self.events_to_delete empty.
+
+	def get_datetime_from_event_dict(self, event_dict):
+		"""Construct a datetime object from the value of the 'ISO' key in event_dict, an iso-formatted string.
+		
+		positional arguments
+		event_dict : dictionary
+
+		returns
+		datetime object
+		False if 'ISO' key doesn't exist, or its value is incorrectly formatted
+		"""
+		try:
+			return datetime.datetime.fromisoformat(event_dict.get('ISO'))
+		except ValueError as e:
+			# .get returns None if key is missing (None is not a valid iso string!)
+			logger.error('Date for event {} in {} is missing or non-iso format (yyyy-mm-dd).'.format(
+				event_dict.get('title'), self.events_file_path))
+			return False
 
 	def add_event(self):
+		"""Get input from user to create a new event dictionary, and add this to the diary by appending the new event
+		to self.events and saving this to self.events_file_path."""
+		# Title can be any non-empty string.
 		title = self.get_non_empty_input('Event title:')
-		while True:
-			date = self.get_non_empty_input('Date ({}):'.format(self.DATE_FORMAT))
-			if date == 'q':
-				return
-			time = self.get_non_empty_input('Time ({}):'.format(self.TIME_FORMAT))
-			if time == 'q':
-				return
-			new_datetime = self.get_datetime_from_user_date_time(date=date, time=time)
-			if not new_datetime:
-				print('Invalid date or time. Please try again (Enter q to quit).')
-				continue
-			else:
-				break
-		new_datetime_iso = new_datetime.isoformat(sep=' ')
+		# User must input a valid date & time.
+		new_datetime_object = self.get_datetime_from_user()
+		if not new_datetime_object:
+			# self.get_datetime_from_user returns False if user wishes to abort adding an event.
+			return
+		# Convert datetime obj into an iso-formatted string, so it can be serialised (single space between date & time).
+		new_datetime_iso = new_datetime_object.isoformat(sep=' ')
+		# Add title and ISO string to event dictionary - title and ISO are the only required keys.
 		new_event_dict = {'title':title, 'ISO': new_datetime_iso}
-		# May be empty
+		# Location is an optional field for events (could add a series of optional fields e.g. company, description).
 		location = input('Location (Optional): ')
 		if location:
+			# Only add the key if user enters a location.
 			new_event_dict['location'] = location
-		if not self.user_wants_event(event_dict=new_event_dict, event_datetime=new_datetime):
+		# Check user wants to add the event.
+		if not self.user_wants_to_add_event(event_dict=new_event_dict):
+			# If not just return to caller (__init__()); functionality ends.
 			return
+		# Backup self.events_file_path before making changes.
 		self.backup_events_file()
 		# Add new event to list of events.
 		self.events.append(new_event_dict)
-		# Write self.events to events file.
+		# Write updated self.events to events file.
 		self.write_to_events_file()
-		# Remove backup
+		# Remove backup as write performed successfully.
 		self.remove_backup_events_file()
 
 	def get_non_empty_input(self, prompt=' '):
-		"""Static method to prompt user until a non-trivial input is entered. Called in main().
-
-		:return: user_input : str
-		"""
+		"""Prompts user until a non-trivial input is entered."""
 		user_input = ''
 		while not user_input:
 			print(prompt, end=' ')
 			user_input = input()
 		return user_input
 
-	def get_datetime_from_user_date_time(self, date, time):
+	def get_datetime_from_user(self):
+		"""Prompts user for date and time in format specified by self.DATE_FORMAT and self.TIME_FORMAT. 
+		self.get_datetime_object_from_date_and_time is called to get a datetime object from this.
+
+		returns
+		new_datetime : datetime.datetime
+		False if user chooses to quit
+		"""
+		while True:
+			date = self.get_non_empty_input('Date ({}):'.format(self.DATE_FORMAT))
+			if date == 'q':
+				return False
+			time = self.get_non_empty_input('Time ({}):'.format(self.TIME_FORMAT))
+			if time == 'q':
+				return False
+			new_datetime = self.get_datetime_object_from_date_and_time(date=date, time=time)
+			# selfget_datetime_object_from_date_and_time returns False if date and time do no represent a real date.
+			if not new_datetime:
+				# Option to quit just in case user doesn't understand format, or the format itself is invalid.
+				print('Invalid date or time. Please try again (Enter q to quit).')
+				continue
+			else:
+				return new_datetime
+
+	def get_datetime_object_from_date_and_time(self, date, time):
+		"""Make a datetime object from date and time, using the datetime.datetime.strptime method.
+
+		positional arguments
+   		date : str -- Should be in the format of self.DATE_FORMAT
+   		time : str -- Should be in the format of self.TIME_FORMAT
+
+    	returns
+    	datetime object
+    	False if date & time do not represent a real date in the given format
+		"""
 		try:
+			# Join user's date and time with a single space, to match format of self.datetime_format.
 			datetime_str = ' '.join([date,time])
+			# Return a datetime corresponding to datetime_str, according to self.datetime_format (see __init__()).
 			return datetime.datetime.strptime(datetime_str, self.datetime_format)
 		except ValueError as e:
-			if 'bad directive' in e:
+			# 'bad directive' appears in error message if one of self.DATE_FORMAT or self.TIME_FORMAT is itself invalid.
+			# This is important to log as it will be impossible to construct a datetime unless this is fixed.
+			if 'bad directive' in str(e):
 				logger.error('Date or time format specified in {} is invalid: {}.'.format(os.path.basename(__file__), e))
 			else:
 				logger.info(e)
-			return False
-
-	def get_datetime_from_event_dict(self, event_dict):
-		try:
-			return datetime.datetime.fromisoformat(event_dict.get('ISO'))
-		except ValueError as e:
-			logger.error('Date for event {} in {} is missing or non-iso format (yyyy-mm-dd).'.format(
-				event_dict.get('title'), self.events_file_path))
+			# Signals caller that date was invalid.
 			return False
 
 	def get_bool_from_yn_input(self, prompt=' '):
+		"""Get response to a yes/no question as a boolean (True/False)."""
 		user_input = ''
 		while user_input not in ['y','Y','n','N']:
 			print(prompt, end=' ')
@@ -315,121 +372,143 @@ class Diary:
 			return True
 		return False
 
-	def user_wants_event(self, event_dict, event_datetime=None):
+	def user_wants_to_add_event(self, event_dict):
+		"""Present event_dict to the user in a human readable format and return True if the user wants to add it."""
 		print('\nPlease check your event\'s details:\n{}'.format(
-			self.generate_event_string(event_dict=event_dict, event_datetime=event_datetime, escape_codes=True)),
+			self.generate_event_string(event_dict=event_dict, escape_codes=True)),
 			end='')
 		return self.get_bool_from_yn_input('Would you like to add this event to the diary (y/n)?')
 
-	def generate_event_string(self, event_dict, event_datetime=None, escape_codes=True):
+	def generate_event_string(self, event_dict, escape_codes=True):
+		"""Return a nicely formatted string for the event described by event_dict. self.LONG_DATE_FORMAT and 
+		self.LONG_TIME_FORMAT are used to format the date and time, respectively. In addition, if escape_codes is
+		True, ANSI code for an underline is added to the date.
+
+		position arguments
+		event_dict : dictionary
+		keyword arguments
+		event_datetime : datetime object corresponding to event_dict['ISO'] (default: None)
+		escape_codes : boolean
+
+		returns
+		event_str : str
+		"""
+		# String to be returned.
 		event_str = ''
-		if event_datetime is None:
-			event_datetime = datetime.datetime.fromisoformat(event_dict['ISO'])
+		# Create a datetime object for the event (allows creation of date strings with different formats).
+		# Small inefficiency: When adding an event a datetime object is created twice (once before to create iso str).
+		event_datetime =self.get_datetime_from_event_dict(event_dict)
 		long_date_str = datetime.datetime.strftime(event_datetime, self.LONG_DATE_FORMAT)
 		long_time_str= datetime.datetime.strftime(event_datetime, self.LONG_TIME_FORMAT)
 		if escape_codes:
+			# \033[4m is ANSI code for underlining - could make this a class variable (and add other options).
 			event_str +=  '\033[4m' + long_date_str + '\033[0m\n' + long_time_str + '\t'
 		else:
+			# Date and time are separated by a newline
 			event_str +=   long_date_str + '\n' + long_time_str + '\t'
+		# Capitalise title, and add the location after the comma, if the event has one.
 		event_str += event_dict['title'].capitalize()
 		location = event_dict.get('location')
 		if location is not None:
 			event_str += ', ' + location
-		# Add newline before next event/end of output.
+		# Add newline (separates events when presenting the diary).
 		event_str += '\n'
 		return event_str
 
 	def backup_events_file(self):
+		"""Copy self.events_file_path to self.events_file_path + '.bak'"""
 		# Construct full path to a backup file 
 		backup_file_path = self.events_file_path + '.bak'
 		with open(self.events_file_path, 'r') as events_file:
 			lines = events_file.read()
-			# or lines = events_file.read()
 		with open(backup_file_path, 'w') as backup_file:
 			logger.info('Creating backup file {}'.format(backup_file_path))
 			backup_file.write(lines)
 
 	def write_to_events_file(self):
+		"""Serialise self.events to self.events_file_path in JSON."""
 		with open(self.events_file_path, 'w') as events_file:
-			# Serialize events - catch exception here?
+			# separators=(',',':') to ensure all whitespace is eliminated.
 			json.dump(self.events, events_file, separators=(',', ':'))
 			# Remove backup given serialization successful (possibly leave backup (?))
 			logger.info('Write to {} successful. Removing backup file.'.format(events_file))
 
 	def remove_backup_events_file(self):
-		backup_file_path = self.events_file_path + '.bak'
-		os.remove(backup_file_path)
+		"""Remove the backup file at  self.events_file_path + '.bak'."""
+		os.remove(self.events_file_path + '.bak')
 
 	def delete_events(self):
-		# Truncate self.events according to events that occur with num_days (see self.truncate_event_lists for implementation)
+		"""Remove events from the diary which occur from now to now + self.option['delete'] days (may be negative)."""
 		try:
+			# So far, no validation has been performed on self.option['delete']
 			num_days = int(self.option['delete'])
 		except ValueError:
 			print('Number of days must be an integer.')
 			return
-		self.truncate_event_lists(num_days=self.option['delete'], delete=True)
+		# Remove events to be deleted from self.events while adding them to self.events_to_delete.
+		self.truncate_event_lists(num_days=num_days, delete=True)
 		# if no events to delete, just exit
-		if (len(self.events_to_delete) == 0):
-			logger.info('No in diary within {} days of now.'.format(num_days))
-			print('Nothing to delete.')
+		if self.events_to_delete == []:
+			logger.info('No events in diary within {} days of now.'.format(num_days))
+			print('No events to remove.')
 			return
+		# Remove events, if confirmed by user.
 		if self.user_wants_removal():
+			# Backup self.events_file_path
 			self.backup_events_file()
 			# Write self.events to events file.
 			self.write_to_events_file()
-			# Remove backup
-			# self.remove_backup_events_file()
-			print('Events deleted. A backup of the old events file can be found at {}.'.format(self.events_file_path + '.bak'))
+			# This time (cf self.add_event) we don't remove the backup
+			print('Events deleted. A backup of the old events file can be found at {}.'.format(
+				self.events_file_path + '.bak'))
 
 	def user_wants_removal(self):
+		"""Display events to be removed from the diary and make user confirm their deletion."""
 		str_to_print =  'Events to be removed from the diary:\n\n'
 		for event_dict in self.events_to_delete:
 			str_to_print += self.generate_event_string(event_dict, escape_codes=True)
-		# Prompt user to confirm events to be removed from the diary
 		print(str_to_print)
 		return self.get_bool_from_yn_input('Confirm removal (y/n)')
 
 	def save_diary(self):
-			"""Save diary to SAVE_FILE (possibly with an appended digit) in a human readable format"""
-			# Starting full path of SAVE_FILE N.B. SAVE_FILE has no .txt extension
+			"""Save diary's events to a text file in a human readable format."""
+			# Absolute path to the save file.
 			save_file_path = os.path.join(os.path.dirname(__file__), self.SAVE_FILE_RELATIVE)		
-			# Construct string to write to file
+			# Header written to file before events - simpy timestamp
 			str_to_write = ('Diary saved on ' + datetime.datetime.strftime(self.now, self.DATE_FORMAT)	
 				+ ' at ' + datetime.datetime.strftime(self.now, self.TIME_FORMAT) + '\n\n')
-			# Copy of the self.events to be mutated (in case want to use self.events later)
-			copy_events = list(self.events) # COPY NOT JUST ASSIGMENT (otherwise both refer to same list!)
-			# To construct str_to_write, we get the year of the first (earliest) event, then iterate through
-			# copy_events gathering all the events occurring in the same year. These are be written together.
-			# Perform the following until copy_events is empty
-			while copy_events:
-				# Year of earliest event in remaining list
+			# Copy of the self.events to be mutated (in case want to use self.events later - not current used).
+			copy_events = list(self.events)
+			# To construct str_to_write, get the year of the first (earliest - events have been sorted) event, 
+			# then iterate through copy_events gathering all the events occurring in the same year. 
+			# These are to be grouped together (same 'section') in the text file.
+			while copy_events: # Until copy_events is empty.
+				# Year of earliest event in the remaining list.
 				year = self.get_datetime_from_event_dict(copy_events[0]).year
-				# 'Header' for all events occurring in the same year
+				# Sub heading, for all events occurring in the same year.
 				str_to_write += str(year) + '\n' + '----' + '\n'
-				# Add string representation of all events in the same year
+				# Add string representation of all events in the same year.
 				for index, event_dict in enumerate(copy_events):
 					if self.get_datetime_from_event_dict(event_dict).year == year:
-						# Do not use console escape codes; just want plain text
+						# Do not use console escape codes; just want plain text.
 						str_to_write += self.generate_event_string(event_dict, escape_codes=False)
 					else:
 						# As we know list is sorted, once an event in the next calendar year is found, we can stop 
 						# AND remove all prior events (do not remove events as we go along; this mutates copy_events).
-						# If index=length-1, then this will return an empty string (tested)
+						# If index=length-1, then this will return an empty list (tested)
 						copy_events = copy_events[index+1:] # Position of colon is essential!
 						# N.B. Previously was deleting events and breaking, but this was dangerous as if all events 
 						# were deleted, copy_events would not exist, and an exception would be thrown when the 
 						# while condition was checked.
-						# del copy_events[:index]
-						break # Can exit for loop as done
-					# If all remaining events in copy_events have the same year, the above else will never be run
-					# In this case we are done; so set copy_events = [] to exit the loop
+						break # Exit for loop.
+					# If all remaining events in copy_events have the same year, the above else will never occur.
+					# In this case we are completely done; so set copy_events = [] to exit the while loop.
 					if index == (len(copy_events)-1):
 						copy_events = []
 				# Some white space before next year's events (still inside while loop)
 				str_to_write += '\n'
-			# If save file already exists (or there is a dir with this name), do not overwrite it
-			# Instead append digits onto the file number until a non-existing file path is created
-			# (alternatively I could always write to self.SAVE_FILE_RELATIVE, only in append mode)
+			# If save file already exists (or there is a dir with this name), do not overwrite it. Instead append digits
+			# onto the file number until a non-existing file path is created (could alternatively append onto one file).
 			digit = 1
 			while os.path.exists(save_file_path):
 				logger.info('{} exists. Adding \'{}\' to filename.'.format(save_file_path, digit))
@@ -439,11 +518,9 @@ class Diary:
 				save_file_path += str(digit)
 				# Increment digit in case next loop is run
 				digit += 1
-
-			# Now we have a file name that does not already exists, create this file and write to it
+			# Now that we have a new file name, create this file and write to it.
 			with open(save_file_path, 'w') as write_file:
 				write_file.write(str_to_write)
-				# Again could iterate through using for loop (perhaps safer if str_to_write is huge).
 			str_to_print = 'Diary successfully written to {}.'.format(save_file_path)
 			print(str_to_print)
 
@@ -452,12 +529,12 @@ def main():
 	del sys.argv[0]
 	# Dictionary to hold option (command line arguments) provided by user - only one option (+ parameter) is accepted.
 	option = {}
-	# Default behaviour (no option passed) is option 'present' with a value of 7
+	# Default behaviour (no option passed) is option 'present' with a value of 7.
 	if len(sys.argv) == 0:
 		option['present'] = 7
 	# If first argument may be interpreted as an integer, option is 'present' with that value
 	elif Diary.check_int(sys.argv[0]):
-		option['present'] = int(sys.argv[0])
+		option['present'] = int(sys.argv[0]) # Could pass string (validation occurs in Diary.present_diary)
 	# Otherwise option is prefixed by - (short option) or -- (long option).
 	else:
 		arg = sys.argv.pop(0)
@@ -473,13 +550,14 @@ def main():
 		elif arg.startswith('--') and option_name in Diary.ALLOWED_OPTIONS_WITH_PARAMETER:
 			# OPTIONS_WITH_PARAMETER must be followed by a parameter (another string).
 			try:
-				option[stripped_arg] = sys.argv.pop(0)
+				option[option_name] = sys.argv.pop(0)
 			except IndexError:
 				print('The {} option requires a parameter.'.format(arg.strip('-')))
 				return
 		else:
 			print('Invalid argument. See --help for usage.')
 			return
+	# Create anonymous Diary object with option dict. All functionality for this script is initiated from __init__().
 	Diary(option)
 
 if __name__ == '__main__':
