@@ -10,7 +10,7 @@ Small diary/calendar script for the Bash shell. Written in python3 (3.7+).
 - `diary -h` prints a summary of the usage and set-up
 - `diary -s` saves _all_ events in the diary to a text file in a nice format
 
-### Set-up (optional)
+### Set-up
 - Create an alias in your `~/.bashrc` with the following line
 ```sh
 alias diary="python full_path_to_diary.py"
