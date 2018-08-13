@@ -37,11 +37,12 @@ class Diary:
 	}
 	ALLOWED_OPTIONS_WITH_PARAMETER = {
 		'delete': None,
-		'present': None
+		'print': None
 	}
 	OPTION_ABBREVIATIONS = {
 		'h':'help',
 		'd':'delete',
+		'p':'print',
 		'a':'add-event',
 		's':'save-diary',
 		'v':'version'
@@ -49,12 +50,44 @@ class Diary:
 	OPTION_FUNCTION_NAMES = {
 		'help': 'print_usage',
 		'version': 'print_version',
-		'present': 'present_diary',
+		'print': 'present_diary',
 		'add-event': 'add_event',
 		'delete': 'delete_events',
 		'save-diary': 'save_diary'
 	}
-	USAGE = """Todo"""
+	USAGE = """\u001b[1mDIARY\u001b[21m
+
+\u001b[1mNAME\u001b[21m
+	diary - print events from diary in the coming week
+
+\u001b[1mSYNOPSIS\u001b[21m
+	diary OPTION [ARGUMENT]
+
+\u001b[1mOPTIONS\u001b[21m
+	-a, --add-event
+		Enter an interactive mode to add a new event to the diary.
+
+	-d, --delete \x1B[3mnum\x1B[23m
+		Remove events from the diary within \x1B[3mnum\x1B[23m days of today's date.
+	 	\x1B[3mnum\x1B[23m must be an integer (0 for events occurring today).
+		A confirmation dialogue will be shown with the events to be deleted.
+
+	\x1B[3mnum\x1B[23m
+		Same as --print \x1B[3mnum\x1B[23m
+
+	-p, --print \x1B[3mnum\x1B[23m
+		Print events from diary within \x1B[3mnum\x1B[23m days of today's date.
+	 	\x1B[3mnum\x1B[23m must be an integer (0 for events occurring today).
+
+	-h, --help
+		Display this message.
+
+	-s, --save-diary
+		Save all diary events in a human readable format to the text file.
+
+	-v, --version
+		Display version information.
+"""
 
 	@staticmethod
 	def check_int(str_to_check):
@@ -164,11 +197,11 @@ class Diary:
 		print('{} {}'.format(os.path.splitext(os.path.basename(__file__))[0], self.VERSION))
 
 	def present_diary(self):
-		"""Print diary entries from today to today + self.option['present'] in a nice format.
-		N.B. self.option['present'] may be negative (events in the past)."""
+		"""Print diary entries from today to today + self.option['print'] in a nice format.
+		N.B. self.option['print'] may be negative (events in the past)."""
 		try:
-			# Currently handling of sys.argv in main() means self.option['present'] is actually type(int) already. 
-			num_days = int(self.option['present'])
+			# Currently handling of sys.argv in main() means self.option['print'] is actually type(int) already. 
+			num_days = int(self.option['print'])
 		except ValueError:
 			print('Number of days must be an integer.')
 			return
@@ -250,7 +283,7 @@ class Diary:
 				# Record events to be deleted so user can check them.
 				self.events_to_delete = truncated_event_list
 			else:
-				# Otherwise, in 'present' mode the truncated list is to be presented to the user. We assign the
+				# Otherwise, in 'print' mode the truncated list is to be presented to the user. We assign the
 				# truncated list to self.events just so we can just iterate through self.events in self.present_diary()
 				self.events = truncated_event_list
 				# No events to delete - leave self.events_to_delete empty.
@@ -531,12 +564,12 @@ def main():
 	del sys.argv[0]
 	# Dictionary to hold option (command line arguments) provided by user - only one option (+ parameter) is accepted.
 	option = {}
-	# Default behaviour (no option passed) is option 'present' with a value of 7.
+	# Default behaviour (no option passed) is option 'print' with a value of 7.
 	if len(sys.argv) == 0:
-		option['present'] = 7
-	# If first argument may be interpreted as an integer, option is 'present' with that value
+		option['print'] = 7
+	# If first argument may be interpreted as an integer, option is 'print' with that value
 	elif Diary.check_int(sys.argv[0]):
-		option['present'] = int(sys.argv[0]) # Could pass string (validation occurs in Diary.present_diary)
+		option['print'] = int(sys.argv[0]) # Could pass string (validation occurs in Diary.present_diary)
 	# Otherwise option is prefixed by - (short option) or -- (long option).
 	else:
 		arg = sys.argv.pop(0)
