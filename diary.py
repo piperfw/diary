@@ -27,6 +27,7 @@ class Diary:
 	# Formats used when presenting a date.
 	LONG_DATE_FORMAT = '%a, %b %d'
 	LONG_TIME_FORMAT = '%H:%M'
+	LONG_DATE_ADDITIONAL_YEAR_FORMAT = ' (%Y)'
 
 	ALLOWED_OPTIONS = {
 		'help':False,
@@ -400,7 +401,11 @@ class Diary:
 		event_datetime = self.get_datetime_from_event_dict(event_dict)
 		long_date_str = datetime.datetime.strftime(event_datetime, self.LONG_DATE_FORMAT)
 		long_time_str= datetime.datetime.strftime(event_datetime, self.LONG_TIME_FORMAT)
-
+		# Add year to long_date_str if event does not occur in current year (could do similar grouping to that in 
+		# saved_diary but think would be distracting/superfluous here). Could add parameter last_year and check to
+		# see if event is in a 'new year' (return str, year from this function) but not sure if worth it (bit ugly).
+		if event_datetime.year != self.now.year:
+			long_date_str += datetime.datetime.strftime(event_datetime, self.LONG_DATE_ADDITIONAL_YEAR_FORMAT)
 		if escape_codes:
 			# \033[4m is ANSI code for underlining - could make this a class variable (and add other options).
 			event_str +=  '\033[4m' + long_date_str + '\033[0m\n' + long_time_str + '\t'
