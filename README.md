@@ -20,7 +20,7 @@ For example, `alias diary="python /home/username/diary-folder/diary.py"` (here `
 Otherwise, the script must always be run with `python full_path_to_diary.py`.
 
 ### Changing date formats
-In order to change the formats used when entering a date and time for an event (`-a`), edit the `DATE_FORMAT` and `TIME_FORMAT` class variables near the top of the `Diary` class in `diary.py`. To change the formatting used when printing time and dates to the console instead edit the `LONG_DATE_FORMAT` and `LONG_TIME_FORMAT`variables (details found in the class docstring). Each of these variables must be a valid directive for the `strftime` directive from the `datetime` module. THe official docs provide a reference for the accepted format codes: [8.1.8. strftime() and strptime() Behavior](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior)
+In order to change the formats used when entering a date and time for an event (`-a`), edit the `DATE_FORMAT` and `TIME_FORMAT` class variables near the top of the `Diary` class in `diary.py`. To change the formatting used when printing time and dates to the console instead edit the `LONG_DATE_FORMAT` and `LONG_TIME_FORMAT`variables (details found in the class docstring). Each of these variables must be a valid directive for the `strftime` directive from the `datetime` module. THe official docs provide a reference for the accepted format codes: [8.1.8. strftime() and strptime() Behavior.](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior)
 ### Feature ideas
 - Ability to edit events in the diary
 - 'Repeat' field to have events automatically repeat after a certain number of hours/days
