@@ -85,7 +85,7 @@ class Diary:
 	LONG_DATE_FORMAT = '%a, %b %d'
 	LONG_TIME_FORMAT = '%H:%M'
 	LONG_DATE_ADDITIONAL_YEAR_FORMAT = ' (%Y)'
-	VERSION = 1.3
+	VERSION = 1.5
 	USAGE = """\u001b[1mDIARY\u001b[21m
 
 \u001b[1mNAME\u001b[21m
@@ -99,9 +99,11 @@ class Diary:
 		Enter an interactive mode to add a new event to the diary.
 
 	-d, --delete \x1B[3mnum\x1B[23m
-		Remove events from the diary within \x1B[3mnum\x1B[23m days of today's date.
-	 	\x1B[3mnum\x1B[23m must be an integer (0 for events occurring today).
-		A confirmation dialogue will be shown with the events to be deleted.
+		Remove events from the diary within \x1B[3mnum\x1B[23m days of today's date. \x1B[3mnum\x1B[23m must be an integer (0 for events occurring
+		today). A confirmation dialogue will be shown with the events to be deleted.
+
+		\u001b[1mN.B.\u001b[21m Events which are repeats of an earlier event will \x1B[3mnot\x1B[23m be removed and so will still be displayed when
+		using --print. In order to prevent such repeats from appearing, the original event must be deleted.
 
 	\x1B[3mnum\x1B[23m
 		Same as --print \x1B[3mnum\x1B[23m
@@ -114,7 +116,9 @@ class Diary:
 		Display this message.
 
 	-s, --save-diary
-		Save all diary events in a human readable format to the text file.
+		Save diary events to a text file in a human readable format.
+
+		For an events set to repeat after a certain number of days, only the original event is written to the file.
 
 	-v, --version
 		Display version information.
@@ -145,8 +149,6 @@ class Diary:
 		if not self.check_event_keys():
 			# Exit if event is missing a key (fatal).
 			return
-		# Sort self.events according to the 'ISO' key.
-		self.sort_events_list()
 		# Current date and time (equivalent to now()).
 		self.now = datetime.datetime.today()
 		# Based the chosen option in self.option, call an appropriate function.
@@ -228,12 +230,16 @@ class Diary:
 	def present_diary(self):
 		"""Print diary entries from today to today + self.option['print'] in a nice format.
 		N.B. self.option['print'] may be negative (events in the past)."""
-		try:
-			# Currently handling of sys.argv in main() means self.option['print'] is actually type(int) already. 
-			num_days = int(self.option['print'])
-		except ValueError:
-			print('Number of days must be an integer.')
+		# Currently handling of sys.argv in main() means self.option['print'] is actually type(int) already. 
+		num_days = self.return_int_or_false_from_str(self.option['print'])
+		if not num_days:
 			return
+		# Set min and max dates from num_days
+		self.set_min_max_datetimes(num_days=num_days)
+		# See if we need to generate any events based on 'repeat' key and num_days.
+		self.generate_repeat_events(num_days=num_days)
+		# Sort self.events according to the 'ISO' key.
+		self.sort_events_list()
 		# Truncate self.events according to events that occur from today until today + num_days.
 		self.truncate_event_lists(num_days=num_days)
 		# Construct string to format diary, depending on the number of days and the remaining number of events.
@@ -247,7 +253,7 @@ class Diary:
 			7: ' in the coming week.',
 			30: ' in the coming month.',
 			365: ' in the coming year.',
-			-1: ' in your diary from today and yesterday.'
+			-1: ' in your diary from yesterday to now.'
 			}
 		if num_days in special_day_strings:
 			str_to_print += special_day_strings[num_days]
@@ -263,6 +269,71 @@ class Diary:
 		# Print constructed string to console (escape codes are used to underline the date).
 		print(str_to_print)
 
+	def set_min_max_datetimes(self, num_days):
+		"""Set self.max_datetime and self.min_datetime which define the period of the diary to be inspected.
+		These instance variables are used by self.genereate_repeat_events, self.remove_events and 
+		self.truncate_events_list.
+		(see self.truncate_event_lists 	docstring for an explanation of the expected behaviour that must result 
+		from self.max/min_datetime)."""
+		# Only need to generate these once
+		if hasattr(self, 'max_datetime') and hasattr(self, 'min_datetime'):
+			return
+		# 00:00 on the current day.
+		start_of_today = datetime.datetime(self.now.year, self.now.month, self.now.day)
+		try:
+			if num_days >= 0:
+				# To calculate max_datetime, remove hours/mins from self.now and add one day (which gives the end 
+				# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
+				self.max_datetime = start_of_today + datetime.timedelta(days=(num_days+1))
+				self.min_datetime = self.now
+			else:
+				# To calculate min_datetime, simply remove the hours/mins from self.today and then add num_days (<0)
+				self.min_datetime = start_of_today + datetime.timedelta(days=(num_days))
+				self.max_datetime = self.now
+		except (ValueError,OverflowError) as e:
+			# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
+			# Value error occurs if max_datetime would have a year >9999 or <0 (restriction of datetime object).
+			logger.info(e)
+			logger.error('Range of days is too large. Aborting.')
+			sys.exit(1)
+
+	def generate_repeat_events(self, num_days):
+		"""If any event in the diary is set to repeat, add any of its repeats that would occur in the interval
+		of the diary to be presented to the user ([self.min_datetime, self.max_datetime]) to self.events."""
+		for event_dict in self.events:
+			event_repeats = event_dict.get('repeat', False)
+			if not event_repeats:
+				continue
+			event_datetime = self.get_datetime_from_event_dict(event_dict)
+			# First date the event is set to repeat on.
+			date_to_check = event_datetime + datetime.timedelta(days=event_repeats)
+			# Check whether any of the repeats (event_datetime + n * event_repeats where n is an integer) fall
+			# between self.min_datetime and self.max_datetime.
+			while date_to_check < self.max_datetime:
+				if self.min_datetime < date_to_check:
+					# Add a 'repeat' event to self.events (only temporarily - self.events is not written to file).
+					self.add_repeat_event(event_dict, new_datetime=date_to_check)
+				# Calculate the next date the event is set to repeat on.
+				date_to_check += datetime.timedelta(days=event_repeats)
+
+	def add_repeat_event(self, event_dict, new_datetime):
+		"""Add a 'repeat entry for event_dict to the list self.events. This entry has the same title (and location),
+		but a different iso string (new_datetime is used) and no 'repeat' key.
+		The addition of repeat entries is only meant to be temporary in the sense that self.events is never written
+		to file after this function has been run (there is little point in having repeat events in the events file;
+		moreover, duplicates would be difficult to handle).
+		"""
+		# Make a copy of event_dict. N.B. All the fields of event_dict are immutable (strings) so a shallow copy is 
+		# sufficient here (else if a mutable value in repeat_event was changed it would also be changed in event_dict).
+		repeat_event = dict(event_dict)
+		# Edit its ISO string according to new_datetime.
+		repeat_event['ISO'] = new_datetime.isoformat(sep=' ')
+		# Delete the repeat key - we only want the first (often original) event to have this key.
+		del repeat_event['repeat']
+		# Add the repeat_event to self.events. N.B. self.events should NOT be written to file (no point having 
+		# duplications in events.json).
+		self.events.append(repeat_event)
+
 	def truncate_event_lists(self, num_days, delete=False):
 			"""Truncate self.events according to events that fall from NOW to the END of today + num_days if num_days 
 			is positive, and from the beginning of today - |num_days| to NOW if num_days is negative.
@@ -274,33 +345,17 @@ class Diary:
 			If delete=True, instead truncate self.events_to_delete (set in self.delete_events) AND assign self.events
 			to those events being excluded.
 			"""
-			# 00:00 on the current day.
-			start_of_today = datetime.datetime(self.now.year, self.now.month, self.now.day)
+			# Set self.min/max_datetime if they haven't been already.
+			self.set_min_max_datetimes(num_days=num_days)
 			# Lists to populate
 			truncated_event_list = []
 			excluded_event_list = []
-			try:
-				if num_days >= 0:
-					# To calculate max_datetime, remove hours/mins from self.now and add one day (which gives the end 
-					# of today), and then add num_days. Hrs, Mins, Secs each default to 0.
-					max_datetime = start_of_today + datetime.timedelta(days=(num_days+1))
-					min_datetime = self.now
-				else:
-					# To calculate min_datetime, simply remove the hours/mins from self.today and then add num_days (<0)
-					min_datetime = start_of_today + datetime.timedelta(days=(num_days))
-					max_datetime = self.now
-			except (ValueError,OverflowError) as e:
-				# OverflowError occurs if |num_days| exceeds 999999999 (max timedelta).
-				# Value error occurs if max_datetime would have a year >9999 or <0 (restriction of datetime object).
-				logger.info(e)
-				logger.error('Range of days is too large. Aborting.')
-				sys.exit(1)
 			for event_dict in self.events:
 				# For each event, generate a datetime object (which itself cannot be serialised). Although ISO strings 
 				# can be directly compared, using datetime objects is convenient to add dates (timedeltas above).
 				event_datetime = self.get_datetime_from_event_dict(event_dict)
-				# The 'truncated' list contains those events falling between min_datetime and max_datetime.
-				if event_datetime > min_datetime and event_datetime < max_datetime:
+				# The 'truncated' list contains those events falling between self.min_datetime and self.max_datetime.
+				if event_datetime > self.min_datetime and event_datetime < self.max_datetime:
 					truncated_event_list.append(event_dict)
 				else:
 					# Other events are added to the excluded list.
@@ -341,12 +396,12 @@ class Diary:
 		# Title can be any non-empty string.
 		title = self.get_non_empty_input('Event title:')
 		# User must input a valid date & time.
-		new_datetime_object = self.get_datetime_from_user()
-		if not new_datetime_object:
+		new_datetime = self.get_datetime_from_user()
+		if not new_datetime:
 			# self.get_datetime_from_user returns False if user wishes to abort adding an event.
 			return
 		# Convert datetime obj into an iso-formatted string, so it can be serialised (single space between date & time).
-		new_datetime_iso = new_datetime_object.isoformat(sep=' ')
+		new_datetime_iso = new_datetime.isoformat(sep=' ')
 		# Add title and ISO string to event dictionary - title and ISO are the only required keys.
 		new_event_dict = {'title':title, 'ISO': new_datetime_iso}
 		# Location is an optional field for events (could add a series of optional fields e.g. company, description).
@@ -354,6 +409,9 @@ class Diary:
 		if location:
 			# Only add the key if user enters a location.
 			new_event_dict['location'] = location
+		# Ask if event should repeat after a set number of days
+		if self.get_bool_from_yn_input('Event repeats (y/n)?'):
+			self.add_repeat_key_value(new_event_dict)
 		# Check user wants to add the event.
 		if not self.user_wants_to_add_event(event_dict=new_event_dict):
 			# If not just return to caller (__init__()); functionality ends.
@@ -435,6 +493,20 @@ class Diary:
 			return True
 		return False
 
+	def add_repeat_key_value(self, event_dict):
+		"""Add a key 'repeat' to event_dict whose value is the number of days after which the event should repeat
+		(specified by user)."""
+		while True:
+			user_input = self.get_non_empty_input('Repeat after how many days?')
+			if user_input == 'q':
+				print('No repeat key added.')
+				return
+			repeat_after = self.return_int_or_false_from_str(user_input, must_be_positive=True)
+			if not repeat_after:
+				continue
+			event_dict['repeat'] = repeat_after
+			return
+
 	def user_wants_to_add_event(self, event_dict):
 		"""Present event_dict to the user in a human readable format and return True if the user wants to add it."""
 		print('\nPlease check your event\'s details:\n{}'.format(
@@ -469,12 +541,26 @@ class Diary:
 		# Only do this when using escape codes (i.e. printing to code - should possibly rename this argument).
 		if event_datetime.year != self.now.year and escape_codes:
 			long_date_str += datetime.datetime.strftime(event_datetime, self.LONG_DATE_ADDITIONAL_YEAR_FORMAT)
+		# Make a note if the event is set to repeat (N.B. Only the first event will have the 'repeat' key, not
+		# the repeats themselves, so only the original event will have this additional string). I think this
+		# is fine behaviour (the only slight improvement possibly would be to always have the first PRINTED
+		# repeat event to have this flag -- but I think this is unnecessary/less clear [user has no way
+		# of telling which event they actually created].
+		event_repeats = event_dict.get('repeat')
+		# event_repeats is known to be int as this script handled it's creation 
+		# (provided events file was has not been # manually edited).
+		repeat_str = ''
+		if event_repeats is not None:
+			if repeat_str == 1:
+				repeat_str = ' (repeats every day)'
+			else:
+				repeat_str = ' (repeats every {} days)'.format(event_repeats)
 		if escape_codes:
 			# \033[4m is ANSI code for underlining - could make this a class variable (and add other options).
-			event_str +=  '\033[4m' + long_date_str + '\033[0m\n' + long_time_str + '\t'
+			event_str +=  '\033[4m' + long_date_str + '\033[0m' + repeat_str + '\n' + long_time_str + '\t'
 		else:
 			# Date and time are separated by a newline
-			event_str +=   long_date_str + '\n' + long_time_str + '\t'
+			event_str +=   long_date_str + repeat_str + '\n' + long_time_str + '\t'
 		# Capitalise title, and add the location after the comma, if the event has one.
 		event_str += event_dict['title'].capitalize()
 		location = event_dict.get('location')
@@ -508,45 +594,122 @@ class Diary:
 
 	def delete_events(self):
 		"""Remove events from the diary which occur from now to now + self.option['delete'] days (may be negative)."""
-		try:
-			# So far, no validation has been performed on self.option['delete']
-			num_days = int(self.option['delete'])
-		except ValueError:
-			print('Number of days must be an integer.')
+		# Notification for  user that the repeats of events outside the 'deletion scope' which are set to repeat in the 
+		# future will still be printed when examining the diary in the very same deletion scope.
+		# A system to work around this (e.g. prompt user to remove events OUTSIDE of the deletion scope which
+		# would have one or more repeats inside the deletion scope) would probably be challenging to implement
+		# given the current set-up.
+		notification = ('Please note that past events in the diary which are set to repeat will still be displayed ' 
+						+ '(see N.B. for the -d option in --help).')
+		# So far, no validation has been performed on self.option['delete']
+		num_days = self.return_int_or_false_from_str(self.option['delete'])
+		if not num_days:
 			return
+		# Extra string appended onto removal message.
+		self.extra_removal_message_str = ''
+		# Sort self.events according to the 'ISO' key.
+		self.sort_events_list()
 		# Remove events to be deleted from self.events while adding them to self.events_to_delete.
 		self.truncate_event_lists(num_days=num_days, delete=True)
 		# if no events to delete, just exit
 		if self.events_to_delete == []:
 			logger.info('No events in diary within {} days of now.'.format(num_days))
 			print('No events to remove.')
+			print(notification)
 			return
+		# Check whether user wants any repeating events to continue repeating.
+		self.add_new_repeat_for_event_to_be_deleted_if_user_desires()
 		# Remove events, if confirmed by user.
 		if self.user_wants_removal():
 			# Backup self.events_file_path
 			self.backup_events_file()
 			# Write self.events to events file.
 			self.write_to_events_file()
-			# This time (cf self.add_event) we don't remove the backup
+			# This time (cf self.add_event) we don't remove the backup.
 			print('Events deleted. A backup of the old events file can be found at {}.'.format(
 				self.events_file_path + '.bak'))
 
+			print(notification)
+
+	def get_short_date_str_from_datetime(self, datetime_to_convert):
+		"""Return a string representation of datetime according to the formats specified by the variables
+		self.DATE_FORMAT and self.TIME_FORMAT (separated by a single space).
+		"""
+		return (datetime.datetime.strftime(datetime_to_convert, self.DATE_FORMAT) + ' '
+				+ datetime.datetime.strftime(datetime_to_convert, self.TIME_FORMAT))
+
+	def return_int_or_false_from_str(self, str_to_check, must_be_positive=False):
+		"""Returns int(str_to_check) if str_to_check has an integer representation and False otherwise.
+		If must_be_positive, only return int(str_to_check) if it is positive.
+		"""
+		try:
+			user_int = int(str_to_check)
+			if must_be_positive and user_int < 1:
+				print('Number of days must be a positive integer.')
+				return False
+			return user_int
+		except ValueError:
+			print('Number of days must be an integer.')
+			return False
+
+	def add_new_repeat_for_event_to_be_deleted_if_user_desires(self):
+		"""If an event to be removed from the diary is marked to repeat the user is prompted (for that individual event)
+		whether they want it to repeat in the future. If so, add a new event to self.events that after self.max_datetime.
+		"""
+		for event_dict in self.events_to_delete:
+			event_repeats = event_dict.get('repeat', False)
+			if not event_repeats:
+				continue
+			event_datetime = self.get_datetime_from_event_dict(event_dict)
+			# Get string representation of datetime (date and time are separated by a single space).
+			event_datetime_str = self.get_short_date_str_from_datetime(event_datetime)
+			print('The event \'{}\' on {} is set to repeat every {} days.'.format(
+				event_dict['title'], event_datetime_str, event_repeats))
+			# Date on which event will start repeating again (this must be greater than self.max_datetime >= self.now)
+			next_repeat_datetime = event_datetime + datetime.timedelta(event_repeats)
+			# Possibly an edge case issue here when equality occurs? Not going to worry about it.
+			while next_repeat_datetime < self.max_datetime:
+				next_repeat_datetime += datetime.timedelta(event_repeats)
+			next_repeat_datetime_str = self.get_short_date_str_from_datetime(next_repeat_datetime)
+			prompt = ('Would you like it to continue repeating in the future (y/n)?' 
+					  + ' (event will begin repeating again from {})'.format(next_repeat_datetime_str))
+			if self.get_bool_from_yn_input(prompt):
+				# Extra message shown to user when asked to confirm removal
+				self.extra_removal_message_str += '- The event \'{}\' will continue to repeat starting {}.\n'.format(
+					event_dict['title'], next_repeat_datetime_str)
+				# Make a new repeating event on next_repeat_datetime, 
+				new_event_dict = dict(event_dict)
+				# Note how we do NOT remove the 'repeat' key (cf. self.add_repeat_event).
+				new_event_dict['ISO'] = next_repeat_datetime.isoformat(sep=' ')
+				# Add to self.events (the 'excluded events' - see self.truncate_event_lists).
+				self.events.append(new_event_dict)
+				# N.B. self.events will be saved (written to self.events_file) soon.
+			else:
+				# Otherwise do nothing (event will be removed and never repeat in the future).
+				self.extra_removal_message_str += '- The event \'{}\' will no longer be repeated.\n'.format(
+					event_dict['title'])
+
 	def user_wants_removal(self):
-		"""Display events to be removed from the diary and make user confirm their deletion."""
+		"""Display events to be removed from the diary and make user confirm their deletion. Additionally, """
 		str_to_print =  'Events to be removed from the diary:\n\n'
 		for event_dict in self.events_to_delete:
 			str_to_print += self.generate_event_string(event_dict, escape_codes=True)
+		str_to_print += '\n' + self.extra_removal_message_str
 		print(str_to_print)
 		return self.get_bool_from_yn_input('Confirm removal (y/n)')
 
 	def save_diary(self):
 			"""Save diary's events to a text file in a human readable format."""
+			# Sort self.events according to the 'ISO' key.
+			self.sort_events_list()
 			# Absolute path to the save file.
 			save_file_path = os.path.join(os.path.dirname(__file__), self.SAVE_FILE_RELATIVE)		
 			# Header written to file before events - simpy timestamp
 			str_to_write = ('Diary saved on ' + datetime.datetime.strftime(self.now, self.DATE_FORMAT)	
 				+ ' at ' + datetime.datetime.strftime(self.now, self.TIME_FORMAT) + '\n\n')
 			# Copy of the self.events to be mutated (in case want to use self.events later - not current used).
+			# N.B. Although the objects in self.events are mutable (dictionaries), we never edit them, only
+			# the list itself. Consequently, a shallow copy is sufficient here.
 			copy_events = list(self.events)
 			# To construct str_to_write, get the year of the first (earliest - events have been sorted) event, 
 			# then iterate through copy_events gathering all the events occurring in the same year. 
